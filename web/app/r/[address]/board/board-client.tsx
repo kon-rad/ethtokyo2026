@@ -12,6 +12,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useNow, useHydrated } from "@/components/countdown";
 import { BoardCalendar } from "@/components/city-calendar";
 import type { ResidencyDto } from "@/lib/server/residencies";
+import type { Presence } from "@/lib/server/door";
 
 type ReceiptRow = { id: number; tx_hash: string; filename: string };
 
@@ -113,6 +114,19 @@ function useReceipts(address: Address) {
   });
 }
 
+/** Door check-ins from the house's seat-key door (hardware/pi4/pi4-door.py). */
+function usePresence(address: Address) {
+  return useQuery({
+    queryKey: ["board-presence", address],
+    queryFn: () => api<Presence>(`/api/residencies/${address}/door/checkins`),
+    refetchInterval: 5_000,
+  });
+}
+
+function shortAddr(a: string): string {
+  return `${a.slice(0, 6)}\u2026${a.slice(-4)}`;
+}
+
 export function BoardClient({ residency }: { residency: ResidencyDto }) {
   const address = residency.address as Address;
   const m = residency.metadata;
@@ -121,6 +135,12 @@ export function BoardClient({ residency }: { residency: ResidencyDto }) {
   const chain = useChainState(address);
   const events = useRecentEvents(address, BigInt(residency.createdBlock));
   const receipts = useReceipts(address);
+  const presence = usePresence(address);
+  const inside = presence.data?.inside ?? [];
+  // Door events from the last 12 hours lead the activity strip
+  const doorEvents = (presence.data?.recent ?? []).filter(
+    (e) => now - Date.parse(e.at) / 1000 < 12 * 3600,
+  );
 
   const s = chain.data;
   const statusLabel = s ? STATUS_LABEL[statusFromIndex(s.status) ?? "Open"] : "…";
@@ -208,6 +228,33 @@ export function BoardClient({ residency }: { residency: ResidencyDto }) {
             </div>
           </div>
 
+          {/* In the house: who checked in at the door and hasn't checked out */}
+          <div className="min-w-0">
+            <p className="flex justify-between text-xs font-semibold md:text-lg">
+              <span>In the house</span>
+              <span className="tabular-nums">{inside.length}</span>
+            </p>
+            <div className="mt-0.5 flex flex-wrap gap-1 overflow-hidden" style={{ maxHeight: "2.6rem" }}>
+              {inside.length === 0 ? (
+                <span className="text-[10px] text-white/40 md:text-sm">
+                  Nobody yet. Plug your seat key into the door to check in.
+                </span>
+              ) : (
+                inside.map((o) => (
+                  <span
+                    key={o.address}
+                    className="max-w-full truncate rounded bg-emerald-400/20 px-1.5 py-0.5 text-[10px] leading-tight md:text-sm"
+                  >
+                    <span className="text-emerald-300">&#9679;</span>{" "}
+                    <span className="font-semibold">{o.name ?? shortAddr(o.address)}</span>
+                    {o.name && <span className="text-white/60"> {shortAddr(o.address)}</span>}
+                    <span className="text-white/60"> · {o.seat ?? "no seat"}</span>
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
+
           {/* Deadline + dates */}
           <div className="flex items-end justify-between gap-2">
             {isFunding ? (
@@ -271,10 +318,19 @@ export function BoardClient({ residency }: { residency: ResidencyDto }) {
       {/* Bottom strip: recent activity + contract */}
       <div className="flex items-center gap-2 border-t border-white/10 px-3 py-1 text-[10px] md:text-sm">
         <div className="flex min-w-0 flex-1 gap-1.5 overflow-hidden whitespace-nowrap">
+          {doorEvents.slice(0, 2).map((e, i) => (
+            <span key={`door-${i}`} className="shrink-0 rounded bg-white/10 px-1.5 py-0.5">
+              <span className={e.direction === "in" ? "text-emerald-300" : "text-amber-300"}>
+                {e.direction === "in" ? "\u2192" : "\u2190"}
+              </span>{" "}
+              {e.name ?? shortAddr(e.address)} {e.direction === "in" ? "checked in" : "checked out"}{" "}
+              <span className="text-white/60">{formatTime(e.at)}</span>
+            </span>
+          ))}
           {events.isLoading ? (
             <span className="text-white/40">Loading activity…</span>
           ) : (events.data ?? []).length === 0 ? (
-            <span className="text-white/40">No activity yet</span>
+            doorEvents.length === 0 && <span className="text-white/40">No activity yet</span>
           ) : (
             (events.data ?? []).slice(0, 3).map((e, i) => {
               const chip = "shrink-0 rounded bg-white/10 px-1.5 py-0.5";
@@ -324,4 +380,8 @@ function formatDate(unix: number): string {
     month: "short",
     day: "numeric",
   });
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }

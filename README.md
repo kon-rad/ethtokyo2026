@@ -101,6 +101,7 @@ It deploys the committed `HEAD`, keeps the server's own `.env.local`, runs the m
 | `/series/[slug]` | Residency series with all its instances |
 | `/r/[address]` | Residency detail, apply, pay, treasury |
 | `/r/[address]/manage` | Host dashboard: applications, withdraw, lifecycle |
+| `/r/[address]/board` | House status board for the Pi's 3.5" screen: seats, deadline, USDC, who's in the house |
 | `/people` | Public directory |
 | `/people/[address]` | Person's profile and participation |
 | `/me` | Edit your own profile; create and revoke agent API keys |
@@ -113,6 +114,8 @@ It deploys the committed `HEAD`, keeps the server's own `.env.local`, runs the m
 | `POST /api/mcp` | MCP server (Streamable HTTP, stateless). Bearer API key. |
 | `POST /api/tx` | Prepare an onchain action as calldata for the human to sign |
 | `GET` / `POST /api/keys`, `DELETE /api/keys/[id]` | Manage API keys (browser session only) |
+| `GET /api/residencies/[addr]/door/challenge` | House door: a one-time challenge for the guest's Pi Zero seat key to sign |
+| `GET` / `POST /api/residencies/[addr]/door/checkins` | Who's in the house (public, for the board) / record a signed check-in or check-out from the door |
 
 ## Team
 

@@ -227,3 +227,16 @@ CREATE TABLE IF NOT EXISTS api_keys (
   revoked_at    TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS api_keys_address_idx ON api_keys (address);
+
+-- The house's seat-key door (hardware/pi4/pi4-door.py). One row per key insertion that opened the
+-- door: the guest's wallet signed a one-time, server-issued challenge (lib/server/door.ts), so a row
+-- can't be made without that wallet's key. Direction alternates per wallet: in, out, in, …
+CREATE TABLE IF NOT EXISTS door_checkins (
+  id          BIGSERIAL PRIMARY KEY,
+  residency   TEXT NOT NULL REFERENCES residencies(address),
+  address     TEXT NOT NULL,                         -- lowercase 0x address of the signing wallet
+  direction   TEXT NOT NULL CHECK (direction IN ('in', 'out')),
+  challenge   TEXT NOT NULL UNIQUE,                  -- one use per challenge
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS door_checkins_residency_idx ON door_checkins (residency, created_at DESC);
