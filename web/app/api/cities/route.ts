@@ -1,74 +1,55 @@
-import { z } from "zod";
-import { parseEventLogs, getAddress, isAddressEqual, type Hex } from "viem";
 import { sql } from "@/lib/db";
-import { factoryAbi } from "@/lib/abi";
-import { config } from "@/lib/config";
-import { metadataHash, launchInput, type CityMetadata } from "@/lib/metadata";
-import { publicClient, readCityState } from "@/lib/server/chain";
-import { toDto, type CityRow } from "@/lib/server/cities";
+import { cityInput, slugify } from "@/lib/metadata";
+import { toCity, uniqueSlug, type CityRow } from "@/lib/server/cities";
 import { requireVerified, handle, fail, readJson } from "@/lib/server/http";
 
 const PAGE = 12;
 
-/** Live cities (not yet ended), newest first, with onchain status. `cursor` is an offset. */
+/** Pop-up cities that haven't ended, soonest first, with how many residencies each has. */
 export const GET = handle(async (req: Request) => {
   const url = new URL(req.url);
   const offset = Math.max(0, Number(url.searchParams.get("cursor") ?? 0) || 0);
   const now = Math.floor(Date.now() / 1000);
-  const rows = await sql<CityRow[]>`
-    SELECT * FROM cities WHERE end_time > ${now}
-    ORDER BY created_at DESC, address LIMIT ${PAGE + 1} OFFSET ${offset}`;
-  const page = rows.slice(0, PAGE);
-  const cities = await Promise.all(
-    page.map(async (r) => {
-      const dto = toDto(r);
-      const state = await readCityState(getAddress(dto.address)).catch(() => null);
-      return { ...dto, state };
-    }),
-  );
-  // "Live" = taking applications or running. Failed and closed cities drop out of the listing.
-  const live = cities.filter((c) => !c.state || c.state.status === "Open" || c.state.status === "Active");
-  return Response.json({ cities: live, nextCursor: rows.length > PAGE ? offset + PAGE : null });
+  const rows = await sql<(CityRow & { residency_count: string; team: { address: string; name: string | null }[] })[]>`
+    SELECT c.*,
+      (SELECT count(*) FROM residencies r WHERE r.city_id = c.id AND NOT r.hidden) AS residency_count,
+      (SELECT coalesce(json_agg(json_build_object('address', t.address,
+                                                  'name', CASE WHEN p.listed THEN p.name END)
+                                ORDER BY (t.role = 'founder') DESC, t.added_at), '[]')
+         FROM city_core_team t LEFT JOIN profiles p ON p.address = t.address
+        WHERE t.city_id = c.id) AS team
+    FROM cities c
+    WHERE c.end_time > ${now}
+    ORDER BY c.start_time ASC, c.id
+    LIMIT ${PAGE + 1} OFFSET ${offset}`;
+  const cities = rows.slice(0, PAGE).map((r) => ({
+    ...toCity(r),
+    residencyCount: Number(r.residency_count),
+    coreTeam: r.team,
+  }));
+  return Response.json({ cities, nextCursor: rows.length > PAGE ? offset + PAGE : null });
 });
 
-const registerBody = z.object({ txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/), metadataJson: z.string().max(200_000) });
-
-/** Records a city after its createCity transaction is mined. Trusts only what the chain says. */
+/** Launch a pop-up city. The creator becomes its founder. No transaction: cities hold no money. */
 export const POST = handle(async (req: Request) => {
   const me = await requireVerified();
-  const parsed = registerBody.safeParse(await readJson(req));
-  if (!parsed.success) fail(400, "Invalid payload");
-  const { txHash, metadataJson } = parsed.data;
+  const parsed = cityInput.safeParse(await readJson(req));
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    fail(400, issue ? `${issue.path.join(".")}: ${issue.message}` : "Invalid form");
+  }
+  const v = parsed.data;
+  const founder = me.address.toLowerCase();
 
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash as Hex, timeout: 60_000 });
-  if (receipt.status !== "success") fail(400, "Transaction failed");
-  const [event] = parseEventLogs({ abi: factoryAbi, eventName: "CityCreated", logs: receipt.logs }).filter((l) =>
-    isAddressEqual(l.address, config.factoryAddress),
-  );
-  if (!event) fail(400, "No CityCreated event from the AI City factory in this transaction");
-
-  const a = event.args;
-  if (!isAddressEqual(a.host, me.address)) fail(403, "This city was launched by a different wallet");
-  if (metadataHash(metadataJson) !== a.metadataHash) fail(400, "Metadata doesn't match the onchain hash");
-
-  const metadata = JSON.parse(metadataJson) as CityMetadata;
-  const recheck = launchInput.safeParse({
-    ...metadata,
-    startTime: Number(a.startTime),
-    endTime: Number(a.endTime),
-    deadline: Math.max(Number(a.deadline), Math.floor(Date.now() / 1000) + 1),
-    minSeats: a.minSeats,
-    maxSeats: a.maxSeats,
+  const slug = await sql.begin(async (tx) => {
+    const slug = await uniqueSlug("cities", slugify(v.name));
+    const [city] = await tx<{ id: string }[]>`
+      INSERT INTO cities (slug, name, location, mission, description, start_time, end_time, founder)
+      VALUES (${slug}, ${v.name}, ${v.location}, ${v.mission}, ${v.description}, ${v.startTime}, ${v.endTime}, ${founder})
+      RETURNING id`;
+    await tx`
+      INSERT INTO city_core_team (city_id, address, role, added_by) VALUES (${city.id}, ${founder}, 'founder', ${founder})`;
+    return slug;
   });
-  if (!recheck.success) fail(400, "Metadata failed validation");
-
-  const city = a.city.toLowerCase();
-  await sql`
-    INSERT INTO cities (address, host, metadata_json, metadata_hash, start_time, end_time, deadline,
-                        min_seats, max_seats, created_tx, created_block)
-    VALUES (${city}, ${a.host.toLowerCase()}, ${metadataJson}, ${a.metadataHash}, ${Number(a.startTime)},
-            ${Number(a.endTime)}, ${Number(a.deadline)}, ${a.minSeats}, ${a.maxSeats}, ${txHash},
-            ${receipt.blockNumber.toString()})
-    ON CONFLICT (address) DO NOTHING`;
-  return Response.json({ address: getAddress(city) });
+  return Response.json({ slug });
 });

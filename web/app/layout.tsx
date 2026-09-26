@@ -9,9 +9,9 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "AI City — pop-up cities, funded together",
+  title: "AI City — pop-up cities made of residencies",
   description:
-    "Launch or join a pop-up city. Verified humans apply, hosts approve, members stake USDC, and everyone is refunded if the city doesn't fill.",
+    "Pop-up cities made of residencies. Anyone can propose a residency; each city's core team approves it. Verified humans stake USDC for a bed, refunded if the residency doesn't fill.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

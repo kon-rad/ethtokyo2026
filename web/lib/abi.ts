@@ -13,44 +13,12 @@ export const factoryAbi = [
   },
   {
     "type": "function",
-    "name": "citiesLength",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "cityAt",
-    "inputs": [
-      {
-        "name": "index",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "createCity",
+    "name": "createResidency",
     "inputs": [
       {
         "name": "p",
         "type": "tuple",
-        "internalType": "struct CityParams",
+        "internalType": "struct ResidencyParams",
         "components": [
           {
             "name": "metadataHash",
@@ -87,12 +55,44 @@ export const factoryAbi = [
     ],
     "outputs": [
       {
-        "name": "city",
+        "name": "residency",
         "type": "address",
         "internalType": "address"
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "residenciesLength",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "residencyAt",
+    "inputs": [
+      {
+        "name": "index",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -109,10 +109,10 @@ export const factoryAbi = [
   },
   {
     "type": "event",
-    "name": "CityCreated",
+    "name": "ResidencyCreated",
     "inputs": [
       {
-        "name": "city",
+        "name": "residency",
         "type": "address",
         "indexed": true,
         "internalType": "address"
@@ -164,7 +164,7 @@ export const factoryAbi = [
   }
 ] as const;
 
-export const cityAbi = [
+export const residencyAbi = [
   {
     "type": "constructor",
     "inputs": [
@@ -181,7 +181,7 @@ export const cityAbi = [
       {
         "name": "p",
         "type": "tuple",
-        "internalType": "struct CityParams",
+        "internalType": "struct ResidencyParams",
         "components": [
           {
             "name": "metadataHash",
@@ -431,7 +431,7 @@ export const cityAbi = [
       {
         "name": "",
         "type": "tuple",
-        "internalType": "struct PopupCity.Member",
+        "internalType": "struct Residency.Member",
         "components": [
           {
             "name": "approved",
@@ -569,7 +569,7 @@ export const cityAbi = [
       {
         "name": "",
         "type": "uint8",
-        "internalType": "enum PopupCity.Status"
+        "internalType": "enum Residency.Status"
       }
     ],
     "stateMutability": "view"
@@ -797,11 +797,6 @@ export const cityAbi = [
   },
   {
     "type": "error",
-    "name": "CityFull",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "CloseNotAllowed",
     "inputs": []
   },
@@ -847,6 +842,11 @@ export const cityAbi = [
   },
   {
     "type": "error",
+    "name": "ResidencyFull",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "SafeERC20FailedOperation",
     "inputs": [
       {
@@ -863,7 +863,7 @@ export const cityAbi = [
       {
         "name": "current",
         "type": "uint8",
-        "internalType": "enum PopupCity.Status"
+        "internalType": "enum Residency.Status"
       }
     ]
   }

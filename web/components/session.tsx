@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { useAccount } from "wagmi";
 import { api } from "@/lib/client/api";
 
-export type Me = { address: `0x${string}`; verified: boolean; adult: boolean };
+export type Me = { address: `0x${string}`; verified: boolean; adult: boolean; name: string | null };
 
 type SessionState = {
   me: Me | null;

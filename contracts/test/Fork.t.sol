@@ -3,8 +3,8 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {AICityFactory} from "../src/AICityFactory.sol";
-import {PopupCity, CityParams} from "../src/PopupCity.sol";
+import {ResidencyFactory} from "../src/ResidencyFactory.sol";
+import {Residency, ResidencyParams} from "../src/Residency.sol";
 
 /// @notice Full lifecycle against real mainnet USDC. Skipped unless MAINNET_RPC_URL is set.
 ///         Run: MAINNET_RPC_URL=... forge test --match-contract Fork -vv
@@ -23,12 +23,12 @@ contract ForkTest is Test {
         assertEq(keccak256(bytes(_symbol(USDC))), keccak256("USDC"));
 
         address host = makeAddr("host");
-        AICityFactory factory = new AICityFactory(usdc);
+        ResidencyFactory factory = new ResidencyFactory(usdc);
         uint64 start = uint64(block.timestamp + 10 days);
         vm.prank(host);
-        PopupCity city = PopupCity(
-            factory.createCity(
-                CityParams({
+        Residency residency = Residency(
+            factory.createResidency(
+                ResidencyParams({
                     metadataHash: keccak256("fork"),
                     startTime: start,
                     endTime: start + 7 days,
@@ -45,31 +45,31 @@ contract ForkTest is Test {
         deal(USDC, b, 2e6);
 
         vm.startPrank(host);
-        city.approve(a, 1, 1e6);
-        city.approve(b, 2, 2e6);
+        residency.approve(a, 1, 1e6);
+        residency.approve(b, 2, 2e6);
         vm.stopPrank();
 
         vm.startPrank(a);
-        usdc.approve(address(city), 1e6);
-        city.stake();
+        usdc.approve(address(residency), 1e6);
+        residency.stake();
         vm.stopPrank();
         vm.startPrank(b);
-        usdc.approve(address(city), 2e6);
-        city.stake();
+        usdc.approve(address(residency), 2e6);
+        residency.stake();
         vm.stopPrank();
 
         vm.warp(block.timestamp + 1 days);
-        assertEq(uint256(city.status()), uint256(PopupCity.Status.Active));
+        assertEq(uint256(residency.status()), uint256(Residency.Status.Active));
 
         vm.startPrank(host);
-        city.withdraw(1.5e6, keccak256("receipt"), "deposit");
-        city.close();
+        residency.withdraw(1.5e6, keccak256("receipt"), "deposit");
+        residency.close();
         vm.stopPrank();
 
         vm.prank(a);
-        city.claim();
+        residency.claim();
         vm.prank(b);
-        city.claim();
+        residency.claim();
         assertEq(usdc.balanceOf(a), 0.5e6);
         assertEq(usdc.balanceOf(b), 1e6);
         assertEq(usdc.balanceOf(host), 1.5e6);

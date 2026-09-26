@@ -64,12 +64,15 @@ export async function getSessionAddress(): Promise<Address | null> {
   }
 }
 
-export type Me = { address: Address; verified: boolean; adult: boolean };
+/** `name` is set once the wallet has a directory profile. */
+export type Me = { address: Address; verified: boolean; adult: boolean; name: string | null };
 
 export async function getMe(): Promise<Me | null> {
   const address = await getSessionAddress();
   if (!address) return null;
-  const [row] = await sql<{ verified_at: Date | null; adult_attested_at: Date | null }[]>`
-    SELECT verified_at, adult_attested_at FROM users WHERE address = ${address.toLowerCase()}`;
-  return { address, verified: !!row?.verified_at, adult: !!row?.adult_attested_at };
+  const [row] = await sql<{ verified_at: Date | null; adult_attested_at: Date | null; name: string | null }[]>`
+    SELECT u.verified_at, u.adult_attested_at, p.name
+    FROM users u LEFT JOIN profiles p ON p.address = u.address
+    WHERE u.address = ${address.toLowerCase()}`;
+  return { address, verified: !!row?.verified_at, adult: !!row?.adult_attested_at, name: row?.name ?? null };
 }

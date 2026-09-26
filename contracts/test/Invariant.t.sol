@@ -2,19 +2,19 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {AICityFactory} from "../src/AICityFactory.sol";
-import {PopupCity, CityParams} from "../src/PopupCity.sol";
-import {MockUSDC} from "./PopupCity.t.sol";
+import {ResidencyFactory} from "../src/ResidencyFactory.sol";
+import {Residency, ResidencyParams} from "../src/Residency.sol";
+import {MockUSDC} from "./Residency.t.sol";
 
 /// @dev Drives random approve/stake/withdraw/close/claim/cancel/time sequences.
-contract CityHandler is Test {
-    PopupCity public city;
+contract ResidencyHandler is Test {
+    Residency public residency;
     MockUSDC public usdc;
     address public host;
     address[] public actors;
 
-    constructor(PopupCity city_, MockUSDC usdc_, address host_) {
-        city = city_;
+    constructor(Residency residency_, MockUSDC usdc_, address host_) {
+        residency = residency_;
         usdc = usdc_;
         host = host_;
         for (uint256 i; i < 6; i++) {
@@ -30,43 +30,43 @@ contract CityHandler is Test {
         uint256 idx = actorSeed % actors.length;
         address a = actors[idx];
         uint256 price = bound(priceSeed, 1, 5_000e6);
-        if (city.status() != PopupCity.Status.Open) return;
-        if (city.getMember(a).staked) return;
+        if (residency.status() != Residency.Status.Open) return;
+        if (residency.getMember(a).staked) return;
         vm.prank(host);
-        city.approve(a, uint32(idx), price);
-        if (city.seatCount() >= city.maxSeats()) return;
+        residency.approve(a, uint32(idx), price);
+        if (residency.seatCount() >= residency.maxSeats()) return;
         usdc.mint(a, price);
         vm.startPrank(a);
-        usdc.approve(address(city), price);
-        city.stake();
+        usdc.approve(address(residency), price);
+        residency.stake();
         vm.stopPrank();
     }
 
     function withdraw(uint256 amountSeed) external {
-        if (city.status() != PopupCity.Status.Active) return;
-        uint256 bal = city.balance();
+        if (residency.status() != Residency.Status.Active) return;
+        uint256 bal = residency.balance();
         if (bal == 0) return;
         vm.prank(host);
-        city.withdraw(bound(amountSeed, 1, bal), bytes32(0), "");
+        residency.withdraw(bound(amountSeed, 1, bal), bytes32(0), "");
     }
 
     function close() external {
-        if (city.status() != PopupCity.Status.Active) return;
+        if (residency.status() != Residency.Status.Active) return;
         vm.prank(host);
-        city.close();
+        residency.close();
     }
 
     function cancel() external {
-        if (city.status() != PopupCity.Status.Open) return;
+        if (residency.status() != Residency.Status.Open) return;
         vm.prank(host);
-        city.cancel();
+        residency.cancel();
     }
 
     function claim(uint256 actorSeed) external {
         address a = actors[actorSeed % actors.length];
-        if (city.claimable(a) == 0) return;
+        if (residency.claimable(a) == 0) return;
         vm.prank(a);
-        city.claim();
+        residency.claim();
     }
 
     function warp(uint256 secondsSeed) external {
@@ -74,21 +74,21 @@ contract CityHandler is Test {
     }
 }
 
-contract PopupCityInvariantTest is Test {
-    PopupCity city;
+contract ResidencyInvariantTest is Test {
+    Residency residency;
     MockUSDC usdc;
-    CityHandler handler;
+    ResidencyHandler handler;
     address host = makeAddr("host");
 
     function setUp() public {
         vm.warp(1_800_000_000);
         usdc = new MockUSDC();
-        AICityFactory factory = new AICityFactory(usdc);
+        ResidencyFactory factory = new ResidencyFactory(usdc);
         uint64 start = uint64(block.timestamp + 20 days);
         vm.prank(host);
-        city = PopupCity(
-            factory.createCity(
-                CityParams({
+        residency = Residency(
+            factory.createResidency(
+                ResidencyParams({
                     metadataHash: bytes32(0),
                     startTime: start,
                     endTime: start + 7 days,
@@ -98,7 +98,7 @@ contract PopupCityInvariantTest is Test {
                 })
             )
         );
-        handler = new CityHandler(city, usdc, host);
+        handler = new ResidencyHandler(residency, usdc, host);
         targetContract(address(handler));
     }
 
@@ -106,13 +106,13 @@ contract PopupCityInvariantTest is Test {
     function invariant_solvent() public view {
         uint256 owed;
         for (uint256 i; i < handler.actorsLength(); i++) {
-            owed += city.claimable(handler.actors(i));
+            owed += residency.claimable(handler.actors(i));
         }
-        assertGe(city.balance(), owed);
+        assertGe(residency.balance(), owed);
     }
 
     /// @notice Seats never exceed the maximum.
     function invariant_seatsBounded() public view {
-        assertLe(city.seatCount(), city.maxSeats());
+        assertLe(residency.seatCount(), residency.maxSeats());
     }
 }
