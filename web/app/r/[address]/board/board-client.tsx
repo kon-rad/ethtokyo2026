@@ -155,8 +155,11 @@ export function BoardClient({ residency }: { residency: ResidencyDto }) {
   const cityUrlLabel = cityUrl.replace(/^https?:\/\//, "");
 
   // Sized for the Pi's 3.5" screen (480×320, landscape): one screen, no scrolling.
+  // Chromium won't make a window narrower than ~500 px, so on the Pi the viewport is wider than
+  // the panel. Cap the board at the physical screen size; on a normal monitor this does nothing.
+  const fit = hydrated ? { maxWidth: window.screen.width, maxHeight: window.screen.height } : undefined;
   return (
-    <div className={`flex h-full flex-col ${bg} text-white transition-colors duration-1000`}>
+    <div className={`flex h-full flex-col ${bg} text-white transition-colors duration-1000`} style={fit}>
       {/* Top bar: residency name + status */}
       <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-1.5">
         <div className="min-w-0">
