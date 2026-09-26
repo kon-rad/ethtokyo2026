@@ -22,6 +22,13 @@ This is the internal log. The public build journal at `/devlog` (`web/app/devlog
 
 ---
 
+## 2026-09-27 — Local database copied to the live instance; trigger search_path fix
+**Commit:** uncommitted
+
+- Copied the local Postgres data to the live instance at Konrad's request, as an exact copy: 3 users, 3 profiles, city `edge-city-goa`, 3 series, 3 proposals, 1 residency, 2 applications, 3 knowledge files. The knowledge chunks were rebuilt by the trigger. The server's previous data is backed up on the droplet under `/root/ai-city/backups/`.
+- `knowledge_rechunk()` now pins its `search_path` (`SET search_path FROM CURRENT`, `web/db/schema.sql`). pg_dump output empties the search_path, so restoring any dump failed with `relation "knowledge_chunks" does not exist`. Migrated locally and on the server.
+- **Known consequences of the exact copy:** (1) the 3 users are anvil's default accounts, whose private keys are public, and are marked verified. Anyone can sign in as them on the live site, including as founder of Edge City Goa. (2) Residency `0xcafac3dd…052c` exists only on local anvil, so on Sepolia it has no onchain state (`state: null`), and staking or approving there will fail. Replace these with real wallets and a Sepolia deployment before inviting anyone.
+
 ## 2026-09-27 — aicity.cyou domain + HTTPS
 **Commit:** `42dfbb2` (server config; this entry)
 

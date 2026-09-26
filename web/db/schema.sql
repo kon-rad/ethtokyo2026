@@ -205,7 +205,9 @@ BEGIN
     INSERT INTO knowledge_chunks (file_id, idx, content) VALUES (NEW.id, n, buf);
   END IF;
   RETURN NULL;
-END $$ LANGUAGE plpgsql;
+END $$ LANGUAGE plpgsql
+-- Pinned so the trigger also works under pg_dump/pg_restore, which empty the search_path.
+SET search_path FROM CURRENT;
 
 DROP TRIGGER IF EXISTS knowledge_files_rechunk ON knowledge_files;
 CREATE TRIGGER knowledge_files_rechunk AFTER INSERT OR UPDATE OF content ON knowledge_files
