@@ -240,3 +240,13 @@ CREATE TABLE IF NOT EXISTS door_checkins (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS door_checkins_residency_idx ON door_checkins (residency, created_at DESC);
+
+-- Door status: real-time feedback for the Pi's status board. The door script (pi4-door.py)
+-- POSTs its current state (checking, opening, denied, open, locked) and the board polls it.
+-- Only the latest status per residency matters; the ON CONFLICT keeps just one row.
+CREATE TABLE IF NOT EXISTS door_status (
+  residency   TEXT PRIMARY KEY REFERENCES residencies(address),
+  status      TEXT NOT NULL CHECK (status IN ('checking', 'opening', 'denied', 'open', 'locked')),
+  message     TEXT NOT NULL DEFAULT '',
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);

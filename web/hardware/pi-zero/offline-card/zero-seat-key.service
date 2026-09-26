@@ -1,0 +1,18 @@
+[Unit]
+Description=AI City seat key: offline signer on USB serial (installed by zero-setup.sh)
+After=dev-ttyGS0.device
+Wants=dev-ttyGS0.device
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/zero-signer/zero-tx-signer.py
+Environment=PYTHONPATH=/opt/zero-signer/lib
+Environment=ZERO_KEY_FILE=/var/lib/zero-signer/private-key
+Environment=ZERO_EXPECTED_ADDRESS=REPLACE_EXPECTED_ADDRESS
+Environment=ZERO_STATUS_FILE=/boot/firmware/zero-status.txt
+Environment=ZERO_CHAIN_IDS=11155111
+# Root: no network on this device, and it writes the status file on the FAT boot partition
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -114,12 +114,27 @@ function useReceipts(address: Address) {
   });
 }
 
+type DoorStatus = {
+  status: "checking" | "opening" | "denied" | "open" | "locked";
+  message: string;
+  at: string;
+} | null;
+
 /** Door check-ins from the house's seat-key door (hardware/pi4/pi4-door.py). */
 function usePresence(address: Address) {
   return useQuery({
     queryKey: ["board-presence", address],
     queryFn: () => api<Presence>(`/api/residencies/${address}/door/checkins`),
     refetchInterval: 5_000,
+  });
+}
+
+/** Real-time door status (checking, opening, denied, locked) from pi4-door.py. */
+function useDoorStatus(address: Address) {
+  return useQuery({
+    queryKey: ["board-door-status", address],
+    queryFn: () => api<DoorStatus>(`/api/residencies/${address}/door/status`),
+    refetchInterval: 2_000,
   });
 }
 
@@ -136,6 +151,7 @@ export function BoardClient({ residency }: { residency: ResidencyDto }) {
   const events = useRecentEvents(address, BigInt(residency.createdBlock));
   const receipts = useReceipts(address);
   const presence = usePresence(address);
+  const doorStatus = useDoorStatus(address);
   const inside = presence.data?.inside ?? [];
   // Door events from the last 12 hours lead the activity strip
   const doorEvents = (presence.data?.recent ?? []).filter(
@@ -230,6 +246,36 @@ export function BoardClient({ residency }: { residency: ResidencyDto }) {
 
           {/* In the house: who checked in at the door and hasn't checked out */}
           <div className="min-w-0">
+            {/* Door status indicator: shown while the door is checking a key */}
+            {doorStatus.data && (
+              <div className="mb-1 flex items-center gap-1.5 text-[10px] md:text-sm">
+                {doorStatus.data.status === "checking" && (
+                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                )}
+                {doorStatus.data.status === "denied" && (
+                  <span className="inline-block h-2 w-2 rounded-full bg-red-400" />
+                )}
+                {doorStatus.data.status === "opening" && (
+                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+                )}
+                {doorStatus.data.status === "open" && (
+                  <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+                )}
+                {doorStatus.data.status === "locked" && (
+                  <span className="inline-block h-2 w-2 rounded-full bg-white/30" />
+                )}
+                <span className={
+                  doorStatus.data.status === "denied" ? "text-red-300" : "text-white/80"
+                }>
+                  {doorStatus.data.status === "checking" && "Checking key..."}
+                  {doorStatus.data.status === "denied" && `Denied: ${doorStatus.data.message}`}
+                  {doorStatus.data.status === "opening" && "Door opening..."}
+                  {doorStatus.data.status === "open" && "Door open"}
+                  {doorStatus.data.status === "locked" && ""}
+                </span>
+                <span className="text-white/40">{new Date(doorStatus.data.at).toLocaleTimeString()}</span>
+              </div>
+            )}
             <p className="flex justify-between text-xs font-semibold md:text-lg">
               <span>In the house</span>
               <span className="tabular-nums">{inside.length}</span>

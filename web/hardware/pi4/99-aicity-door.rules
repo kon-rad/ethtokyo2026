@@ -1,0 +1,16 @@
+# /etc/udev/rules.d/99-aicity-door.rules — Pi 4: trigger door flow when Pi Zero enumerates
+#
+# When the Pi Zero's USB serial gadget appears, start the door handling unit.
+# The Zero enumerates as *Gadget_Serial* on /dev/ttyACM*.
+#
+# This replaces the 1-second polling loop in pi4-door.py's run().
+# The service checks that the port is still the Zero and proceeds immediately.
+
+ACTION=="add", SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*", \
+  SYMLINK=="serial/by-id/*Gadget*", \
+  TAG+="systemd", ENV{SYSTEMD_WANTS}="aicity-door-key@$kernel.service"
+
+# Also match by direct ID path as a fallback
+ACTION=="add", SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*", \
+  ATTRS{idVendor}=="0525", ATTRS{idProduct}=="a4a2", \
+  TAG+="systemd", ENV{SYSTEMD_WANTS}="aicity-door-key@$kernel.service"
