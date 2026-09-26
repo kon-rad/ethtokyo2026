@@ -54,7 +54,11 @@ class User {
     }
     return res;
   }
-  async json(path, body, method = body ? "POST" : "GET") {
+  // json(path) → GET; json(path, body) → POST body; json(path, { method, json }) → that method + json.
+  async json(path, arg, method) {
+    const explicit = arg && typeof arg === "object" && "method" in arg && "json" in arg;
+    const body = explicit ? arg.json : arg;
+    method = explicit ? arg.method : (method ?? (body ? "POST" : "GET"));
     const res = await this.fetch(path, {
       method,
       headers: body ? { "content-type": "application/json" } : undefined,
@@ -142,7 +146,7 @@ const residencyForm = {
   startTime: cityForm.startTime + 1,
   endTime: cityForm.endTime - 1,
   deadline: now + 3 * day,
-  minSeats: 2,
+  minSeats: 1,
   maxSeats: 3,
   series: { newSeries: { name: "Builders' House", description: "A recurring builder residency" } },
 };
@@ -212,13 +216,15 @@ check(rec.status === 200, "alice approved onchain and recorded");
 // ---------------------------------------------------------------- stake
 await host.tx({ address: USDC, abi: parseAbi(["function mint(address,uint256)"]), functionName: "mint", args: [alice.account.address, usdc(100)] });
 await alice.tx({ address: USDC, abi: erc20, functionName: "approve", args: [RES_ADDR, usdc(100)] });
-await alice.tx({ address: RES_ADDR, abi, functionName: "stake" });
+const wrongPrice = await alice.tx({ address: RES_ADDR, abi, functionName: "stake", args: [usdc(99)] }).then(() => false, (e) => /PriceChanged/.test(String(e)));
+check(wrongPrice, "stake with a price other than the approved one reverts (PriceChanged)");
+await alice.tx({ address: RES_ADDR, abi, functionName: "stake", args: [usdc(100)] });
 check((await pub.readContract({ address: RES_ADDR, abi, functionName: "seatCount" })) === 1n, "1 seat staked");
 
 // ---------------------------------------------------------------- deadline -> Active
 await pub.request({ method: "evm_increaseTime", params: [3 * day + 3601] });
 await pub.request({ method: "evm_mine", params: [] });
-check((await pub.readContract({ address: RES_ADDR, abi, functionName: "status" })) === 1n, "status is Active after the deadline");
+check((await pub.readContract({ address: RES_ADDR, abi, functionName: "status" })) === 1, "status is Active after the deadline");
 
 // ---------------------------------------------------------------- withdraw + receipt
 const file = Buffer.from("%PDF-1.4\n% AI City test receipt\n", "utf8");
@@ -240,12 +246,22 @@ await alice.tx({ address: RES_ADDR, abi, functionName: "claim" });
 const after = await pub.readContract({ address: USDC, abi: erc20, functionName: "balanceOf", args: [alice.account.address] });
 check(after - before === usdc(50), "alice claims pro-rata leftovers (50 USDC)");
 
+// ---------------------------------------------------------------- host handover
+await host.tx({ address: RES_ADDR, abi, functionName: "transferHost", args: [bob.account.address] });
+check((await pub.readContract({ address: RES_ADDR, abi, functionName: "pendingHost" })) === bob.account.address, "host offers the role to bob");
+await bob.tx({ address: RES_ADDR, abi, functionName: "acceptHost" });
+const synced = await stranger.json(`/api/residencies/${RES_ADDR}/host`, {});
+check(synced.status === 200 && synced.data.host === bob.account.address, "host sync reads bob from the chain");
+const afterSync = await stranger.json(`/api/residencies/${RES_ADDR}`);
+check(afterSync.data.residency?.host.toLowerCase() === bob.account.address.toLowerCase(), "residency record now names bob as host");
+check((await host.json(`/api/residencies/${RES_ADDR}/applications`)).status === 403, "old host loses the host dashboard");
+
 // ---------------------------------------------------------------- pages render
 const paths = [
   "/", `/cities`, `/cities/${CITY_SLUG}`, `/cities/${CITY_SLUG}/manage`, `/cities/${CITY_SLUG}/propose`,
   `/launch`, `/verify`, `/proposals/${PROP_ID}`, `/series/builders-house`,
   `/r/${RES_ADDR}`, `/r/${RES_ADDR}/manage`, `/r/${RES_ADDR}/apply`,
-  `/people`, `/people/${alice.account.address}`, `/me`,
+  `/people`, `/people/${alice.account.address}`, `/me`, `/docs`, `/docs/contracts`,
 ];
 for (const path of paths) {
   const r = await fetch(BASE + path);

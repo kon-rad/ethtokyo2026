@@ -43,6 +43,7 @@ const sections = [
     items: [
       { id: "stack", title: "Stack overview" },
       { id: "contracts", title: "Smart contracts" },
+      { id: "contracts-reference", title: "Contract reference →", href: "/docs/contracts" },
       { id: "data-model", title: "Data model" },
       { id: "auth-flow", title: "Session and auth flow" },
       { id: "deploy-flow", title: "Residency lifecycle (deploy flow)" },
@@ -69,7 +70,7 @@ function TOC() {
           <ul className="space-y-1 border-l border-line pl-3">
             {s.items.map((item) => (
               <li key={item.id}>
-                <a href={`#${item.id}`} className="text-sm text-muted hover:text-foreground">
+                <a href={"href" in item ? item.href : `#${item.id}`} className="text-sm text-muted hover:text-foreground">
                   {item.title}
                 </a>
               </li>
@@ -272,7 +273,7 @@ export default function DocsPage() {
             <ol>
               <li>After the host approves your application, go to the residency page.</li>
               <li>Click &quot;Pay [price] USDC to hold your bed.&quot;</li>
-              <li>Your wallet prompts you to approve the USDC spend, then call <code>stake()</code>.</li>
+              <li>Your wallet prompts you to approve the USDC spend, then call <code>stake(price)</code>. If the host changed your price in the meantime, the payment fails instead of charging the new amount.</li>
               <li>The funds sit in the residency&apos;s own contract until the deadline.</li>
             </ol>
 
@@ -282,7 +283,9 @@ export default function DocsPage() {
               <li>Review applications: approve each applicant for a specific bed and price, or deny.</li>
               <li>Monitor the seat count, deadline countdown and treasury balance.</li>
               <li>Cancel the residency before the deadline if needed (everyone gets a full refund).</li>
-              <li>Close the residency after the end date to release leftover funds pro-rata.</li>
+              <li>Close the residency once spending is done (anyone can close it after the end date) to return leftover funds pro-rata.</li>
+              <li>Hand the residency to another wallet with &quot;Hand over hosting&quot;; the new wallet accepts on the residency page.</li>
+              <li>180 days after closing, sweep whatever guests didn&apos;t claim.</li>
             </ol>
 
             <h3 id="withdraw-receipt">Withdraw funds and upload receipts</h3>
@@ -297,7 +300,7 @@ export default function DocsPage() {
             <h3 id="claim-refund">Claim a refund</h3>
             <ul>
               <li><strong>Failed or cancelled:</strong> call <code>claim()</code> to get your full stake back.</li>
-              <li><strong>Closed:</strong> call <code>claim()</code> to get your pro-rata share of unspent funds.</li>
+              <li><strong>Closed:</strong> call <code>claim()</code> to get your pro-rata share of unspent funds. Claim within 180 days: after that the host can sweep what&apos;s unclaimed.</li>
               <li>Each address can claim once. The residency page shows your claimable amount.</li>
             </ul>
           </section>
@@ -389,7 +392,8 @@ Postgres (Neon)                Ethereum mainnet / anvil
               <li>
                 <strong>Residency</strong> — one contract per residency. Holds USDC. Immutable
                 parameters set at construction. Functions: <code>approve</code>, <code>revoke</code>,
-                <code>stake</code>, <code>cancel</code>, <code>withdraw</code>, <code>close</code>,
+                <code>stake</code>, <code>cancel</code>, <code>withdraw</code>, <code>close</code>, <code>sweep</code>,
+                <code>transferHost</code>, <code>acceptHost</code>,
                 <code>claim</code>. Uses OpenZeppelin&apos;s <code>SafeERC20</code> and
                 <code>ReentrancyGuard</code>.
               </li>
@@ -397,6 +401,12 @@ Postgres (Neon)                Ethereum mainnet / anvil
             <p>
               Constructor checks: duration ≥ 7 days, deadline ≤ start time, deadline in the future,
               1 ≤ minSeats ≤ maxSeats ≤ 500.
+            </p>
+            <p>
+              <Link href="/docs/contracts" className="underline">
+                Read the full contract reference →
+              </Link>{" "}
+              Every function, who can call it, when, and what it does with your USDC.
             </p>
 
             <h3 id="data-model">Data model</h3>
@@ -528,7 +538,7 @@ Postgres (Neon)                Ethereum mainnet / anvil
                 </tr>
                 <tr className="border-b border-line">
                   <td className="py-2 font-medium">Intelligent Technology</td>
-                  <td className="py-2">Smart contracts automate the trust: money sits in code, the minimum-seat rule is enforced by the chain, the host can only withdraw against uploaded receipts that members can verify.</td>
+                  <td className="py-2">Smart contracts automate the trust: money sits in code, the minimum-seat rule is enforced by the chain, every withdrawal is recorded onchain with the hash of its receipt, so members can check the spending.</td>
                 </tr>
                 <tr className="border-b border-line">
                   <td className="py-2 font-medium">Open Society</td>

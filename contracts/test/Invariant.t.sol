@@ -38,7 +38,7 @@ contract ResidencyHandler is Test {
         usdc.mint(a, price);
         vm.startPrank(a);
         usdc.approve(address(residency), price);
-        residency.stake();
+        residency.stake(price);
         vm.stopPrank();
     }
 

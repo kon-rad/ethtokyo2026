@@ -1,12 +1,12 @@
 [Unit]
-Description=Pop-up City Seat Key Orchestrator
+Description=Residency Seat Key Orchestrator
 Documentation=https://github.com/kon-rad/AI-City/docs/pi-zero-seat-key-guide.md
 After=network-online.target
 
 [Service]
 ExecStart=/usr/bin/python3 /home/pi/pi4-orchestrator.py
 WorkingDirectory=/home/pi
-Environment=CITY_ADDRESS=0xYourContractAddress
+Environment=RESIDENCY_ADDRESS=0xYourContractAddress
 Environment=RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YourKey
 Restart=always
 RestartSec=10

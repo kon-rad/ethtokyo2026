@@ -3,7 +3,7 @@
 Pi Zero Offline Seat Key Signer
 Runs over USB serial gadget mode. No Wi-Fi, no network.
 Reads seed from /boot/seat.seed.
-Only signs: challenge + cityAddress + "ACCESS"
+Only signs: challenge + residencyAddress + "ACCESS"
 Never signs arbitrary data or transactions.
 
 Usage: runs at boot via /etc/rc.local.
@@ -16,7 +16,7 @@ from eth_account.messages import encode_defunct
 
 # ── Configuration ──────────────────────────────────────────
 SEED_FILE = "/boot/seat.seed"
-CITY_ADDRESS = "0x0000000000000000000000000000000000000000"  # ← REPLACE ME
+RESIDENCY_ADDRESS = "0x0000000000000000000000000000000000000000"  # ← REPLACE ME
 SERIAL_PORT = "/dev/ttyAMA0"
 BAUD = 115200
 # ──────────────────────────────────────────────────────────
@@ -31,7 +31,7 @@ def load_key():
     return Account.from_mnemonic(seed)
 
 def sign_challenge(key, challenge_hex):
-    message = challenge_hex + CITY_ADDRESS.lower() + "ACCESS"
+    message = challenge_hex + RESIDENCY_ADDRESS.lower() + "ACCESS"
     signed = key.sign_message(encode_defunct(text=message))
     return signed.signature.hex()
 

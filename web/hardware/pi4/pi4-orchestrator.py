@@ -2,16 +2,17 @@
 """
 Pi 4 Orchestrator for the Seat Key Demo
 Connects three things:
-  1. PopupCity contract via cast (every 5s)
+  1. Residency contract via cast (every 5s)
   2. Arduino over /dev/ttyACM0 (LED bar + servo)
   3. Pi Zero over /dev/ttyGS0 (seat key signer)
 
 When the Zero connects, the Pi 4 sends a random challenge.
 The Zero signs it. The Pi 4 recovers the signer address and
-checks isSeated(addr) on the contract. If valid, the door unlocks.
+checks the contract: the address has staked (getMember), the residency is
+Active, and today is between startTime and endTime. If all pass, the door unlocks.
 
 Environment variables:
-  CITY_ADDRESS  — PopupCity contract address
+  RESIDENCY_ADDRESS  — Residency contract address
   RPC_URL       — Ethereum RPC endpoint (Alchemy, Infura, etc.)
 """
 
@@ -20,7 +21,7 @@ from eth_account import Account
 from eth_account.messages import encode_defunct
 
 # ── Config ─────────────────────────────────────────────────
-CONTRACT = os.environ["CITY_ADDRESS"]
+CONTRACT = os.environ["RESIDENCY_ADDRESS"]
 RPC = os.environ["RPC_URL"]
 ARDUINO_PORT = "/dev/ttyACM0"
 ZERO_PORT = "/dev/ttyGS0"
@@ -43,19 +44,22 @@ async def run_cast(*args):
     return stdout.decode().strip()
 
 async def get_seated_count():
-    """Number of staked members (via the contract's seatedCount())."""
-    result = await run_cast("call", CONTRACT, "seatedCount()(uint256)")
-    return int(result)
+    """Number of staked members (the contract's seatCount())."""
+    result = await run_cast("call", CONTRACT, "seatCount()(uint256)")
+    return int(result.split()[0])
 
 async def is_seated(addr):
-    """Check if an address is staked in an active residency."""
-    result = await run_cast("call", CONTRACT, f"isSeated(address)(bool)", addr)
-    return result.lower() == "true"
+    """True if addr has staked and the residency's dates include today."""
+    member = await run_cast("call", CONTRACT, "getMember(address)((bool,bool,bool,uint32,uint256))", addr)
+    staked = member.strip("()").split(",")[1].strip() == "true"  # (approved, staked, claimed, bedId, price)
+    start = int((await run_cast("call", CONTRACT, "startTime()(uint64)")).split()[0])
+    end = int((await run_cast("call", CONTRACT, "endTime()(uint64)")).split()[0])
+    return staked and start <= time.time() < end
 
 async def get_status():
-    """Residency status: 0=Funding, 1=Active, 2=Closed, 3=Failed."""
+    """Residency status: 0=Open, 1=Active, 2=Failed, 3=Closed."""
     result = await run_cast("call", CONTRACT, "status()(uint8)")
-    return {0: "Funding", 1: "Active", 2: "Closed", 3: "Failed"}.get(
+    return {0: "Open", 1: "Active", 2: "Failed", 3: "Closed"}.get(
         int(result), "Unknown"
     )
 

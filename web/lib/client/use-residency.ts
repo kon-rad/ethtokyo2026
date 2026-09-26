@@ -22,6 +22,9 @@ export function useResidencyChain(residency: Address) {
       { ...c, functionName: "claimable", args: [me] },
       { address: config.usdcAddress, abi: erc20Abi, functionName: "allowance", args: [me, residency], chainId: config.chain.id },
       { address: config.usdcAddress, abi: erc20Abi, functionName: "balanceOf", args: [me], chainId: config.chain.id },
+      { ...c, functionName: "pendingHost" },
+      { ...c, functionName: "closedAt" },
+      { ...c, functionName: "SWEEP_DELAY" },
     ],
     query: { refetchInterval: 15_000 },
   });
@@ -37,5 +40,8 @@ export function useResidencyChain(residency: Address) {
     claimable: (r?.[6].result as bigint | undefined) ?? 0n,
     allowance: (r?.[7].result as bigint | undefined) ?? 0n,
     usdcBalance: (r?.[8].result as bigint | undefined) ?? 0n,
+    pendingHost: (r?.[9].result as Address | undefined) ?? zeroAddress,
+    /** Unix seconds when the host may sweep leftovers; 0 until the residency is closed. */
+    sweepAt: r?.[10].result ? Number(r[10].result) + Number(r?.[11].result ?? 0n) : 0,
   };
 }

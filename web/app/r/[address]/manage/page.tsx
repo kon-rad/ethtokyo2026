@@ -3,7 +3,7 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { sha256, toHex, type Address, type Hex } from "viem";
+import { isAddress, sha256, toHex, zeroAddress, type Address, type Hex } from "viem";
 import { residencyAbi } from "@/lib/abi";
 import { allBeds } from "@/lib/metadata";
 import { api, errorMessage } from "@/lib/client/api";
@@ -90,12 +90,17 @@ function Manage({ residency }: { residency: ResidencyDto }) {
 
       {chain.status === "Active" && <Withdraw residency={residency} balance={chain.balance} onDone={refresh} />}
       <Lifecycle residency={residency} status={chain.status} onDone={refresh} />
+      {chain.status === "Closed" && <Sweep address={address} sweepAt={chain.sweepAt} balance={chain.balance} onDone={refresh} />}
+      <TransferHost address={address} pendingHost={chain.pendingHost} onDone={refresh} />
 
       <section className="space-y-4 pt-4">
         <KnowledgeManager
           scope="residency"
           slugOrAddress={residency.address}
           sharedFiles={[
+            ...(residency.city
+              ? [{ filename: `city:${residency.city.slug}`, label: `${residency.city.name} — the city's knowledge base` }]
+              : []),
             { filename: "argo-journal", label: "Argo journal — learnings.md" },
           ]}
         />
@@ -349,6 +354,90 @@ function Lifecycle({ residency, status, onDone }: { residency: ResidencyDto; sta
             </Button>
             <Button variant="secondary" onClick={() => setConfirming(false)}>
               Keep it
+            </Button>
+          </div>
+        )}
+        {tx.error && <p className="text-xs text-danger">{tx.error}</p>}
+      </Card>
+    </section>
+  );
+}
+
+function Sweep({ address, sweepAt, balance, onDone }: { address: Address; sweepAt: number; balance: bigint; onDone: () => void }) {
+  const tx = useTx();
+  const [now] = useState(() => Date.now() / 1000);
+  const ready = sweepAt > 0 && now >= sweepAt;
+  return (
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold">Sweep leftovers</h2>
+      <Card className="space-y-3">
+        <p className="text-sm text-muted">
+          180 days after closing, you can collect whatever guests haven&apos;t claimed, plus rounding dust.
+          {sweepAt > 0 && !ready && <> Available from {new Date(sweepAt * 1000).toLocaleDateString()}.</>} Guests can no
+          longer claim after a sweep.
+        </p>
+        <Button
+          variant="secondary"
+          disabled={!ready || balance === 0n}
+          loading={tx.busy}
+          onClick={() => tx.send({ address, abi: residencyAbi, functionName: "sweep" }).then(onDone).catch(() => {})}
+        >
+          Sweep {formatUsdc(balance)} USDC
+        </Button>
+        {tx.error && <p className="text-xs text-danger">{tx.error}</p>}
+      </Card>
+    </section>
+  );
+}
+
+function TransferHost({ address, pendingHost, onDone }: { address: Address; pendingHost: Address; onDone: () => void }) {
+  const [to, setTo] = useState("");
+  const tx = useTx();
+  const pending = pendingHost !== zeroAddress;
+  return (
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold">Hand over hosting</h2>
+      <Card className="space-y-3">
+        <p className="text-sm text-muted">
+          Offer the host role to another wallet. Nothing changes until that wallet accepts on the residency page. Once it
+          accepts, it controls approvals, withdrawals and closing, and this wallet loses them.
+        </p>
+        {pending ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm">
+              Waiting for <code>{shortAddress(pendingHost)}</code> to accept.
+            </p>
+            <Button
+              variant="secondary"
+              loading={tx.busy}
+              onClick={() =>
+                tx.send({ address, abi: residencyAbi, functionName: "transferHost", args: [zeroAddress] }).then(onDone).catch(() => {})
+              }
+            >
+              Cancel offer
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-64 flex-1">
+              <Field label="New host wallet">
+                <Input value={to} onChange={(e) => setTo(e.target.value.trim())} placeholder="0x…" />
+              </Field>
+            </div>
+            <Button
+              disabled={!isAddress(to)}
+              loading={tx.busy}
+              onClick={() =>
+                tx
+                  .send({ address, abi: residencyAbi, functionName: "transferHost", args: [to as Address] })
+                  .then(() => {
+                    setTo("");
+                    onDone();
+                  })
+                  .catch(() => {})
+              }
+            >
+              Offer host role
             </Button>
           </div>
         )}

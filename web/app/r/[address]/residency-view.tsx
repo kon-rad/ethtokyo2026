@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { usePublicClient } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Address } from "viem";
 import { residencyAbi, erc20Abi } from "@/lib/abi";
 import { config } from "@/lib/config";
@@ -90,6 +90,7 @@ export function ResidencyView({ residency }: { residency: ResidencyDto }) {
               <span className="text-muted">Held in contract</span>
               <span className="font-medium">{formatUsdc(chain.balance)} USDC</span>
             </div>
+            {signedIn && me?.address.toLowerCase() === chain.pendingHost.toLowerCase() && <AcceptHost address={address} />}
             <ActionPanel residency={residency} chain={chain} isHost={!!isHost} myBedLabel={myBed ? `${myBed.room} · ${myBed.label}` : undefined} />
           </Card>
         </div>
@@ -274,7 +275,9 @@ function ActionPanel({
             className="w-full"
             disabled={short}
             loading={tx.busy}
-            onClick={() => tx.send({ address, abi: residencyAbi, functionName: "stake" }).then(refetch).catch(() => {})}
+            onClick={() =>
+              tx.send({ address, abi: residencyAbi, functionName: "stake", args: [price] }).then(refetch).catch(() => {})
+            }
           >
             {chain.allowance >= price && "Step 2 of 2 · "}Pay {formatUsdc(price)} USDC
           </Button>
@@ -363,5 +366,29 @@ function Treasury({ residency }: { residency: ResidencyDto }) {
         </div>
       )}
     </section>
+  );
+}
+
+function AcceptHost({ address }: { address: Address }) {
+  const tx = useTx();
+  const router = useRouter();
+  return (
+    <div className="space-y-2">
+      <Notice tone="info">The host has offered to hand this residency over to your wallet.</Notice>
+      <Button
+        className="w-full"
+        loading={tx.busy}
+        onClick={() =>
+          tx
+            .send({ address, abi: residencyAbi, functionName: "acceptHost" })
+            .then(() => api(`/api/residencies/${address}/host`, { method: "POST" }))
+            .then(() => router.refresh())
+            .catch(() => {})
+        }
+      >
+        Accept host role
+      </Button>
+      {tx.error && <p className="text-xs text-danger">{tx.error}</p>}
+    </div>
   );
 }

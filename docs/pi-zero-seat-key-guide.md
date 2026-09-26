@@ -8,7 +8,7 @@ This guide walks through every step to make a physical door that opens only for 
 ## Architecture overview
 
 ```
-  PopupCity contract (Ethereum mainnet)
+  Residency contract (Ethereum, one per residency)
     ▲  viem reads via cast (every 5s)
     │
   Pi 4 Model B
@@ -17,7 +17,7 @@ This guide walks through every step to make a physical door that opens only for 
     │                                     └── SG90 servo latch (D12)
     │
     └── USB serial (/dev/ttyGS0)  ──► Pi Zero (USB gadget mode, air-gapped)
-                                          └── signs "challenge + cityAddress + ACCESS"
+                                          └── signs "challenge + residencyAddress + ACCESS"
 ```
 
 **No Wi-Fi on the Zero.** The Pi Zero has never touched the internet. It signs messages over a direct USB serial cable.
@@ -116,7 +116,7 @@ Create the script at `/home/pi/zero-signer.py` on the Zero:
 Pi Zero Offline Seat Key Signer
 Runs over USB serial gadget mode. No Wi-Fi, no network.
 Reads seed from /boot/seat.seed.
-Only signs: challenge + cityAddress + "ACCESS"
+Only signs: challenge + residencyAddress + "ACCESS"
 """
 
 import os, sys, time, json
@@ -124,7 +124,7 @@ from eth_account import Account
 from eth_account.messages import encode_defunct
 
 SEED_FILE = "/boot/seat.seed"
-CITY_ADDRESS = "0x0000000000000000000000000000000000000000"  # REPLACE ME
+RESIDENCY_ADDRESS = "0x0000000000000000000000000000000000000000"  # REPLACE ME
 SERIAL_PORT = "/dev/ttyAMA0"
 BAUD = 115200
 
@@ -138,7 +138,7 @@ def load_key():
     return Account.from_mnemonic(seed)
 
 def sign_challenge(key, challenge_hex):
-    message = challenge_hex + CITY_ADDRESS.lower() + "ACCESS"
+    message = challenge_hex + RESIDENCY_ADDRESS.lower() + "ACCESS"
     signed = key.sign_message(encode_defunct(text=message))
     return signed.signature.hex()
 
@@ -189,7 +189,7 @@ if __name__ == "__main__":
 ```
 </details>
 
-**Important:** Replace `CITY_ADDRESS` on line 10 with your PopupCity contract address before copying.
+**Important:** Replace `RESIDENCY_ADDRESS` on line 10 with the residency's contract address (from its page at /r/[address]) before copying.
 
 Make it executable and run at boot:
 
@@ -259,7 +259,7 @@ Upload this sketch via the Arduino IDE on your Mac:
 <summary>Click to expand: seat-key-controller.ino</summary>
 
 ```cpp
-// Seat Key Controller for Pop-up City
+// Seat Key Controller for an AI City residency
 // Pi 4 sends single-character commands over USB serial.
 // LED bar on D2-D11, servo latch on D12.
 
@@ -386,7 +386,7 @@ pip3 install pyserial aiofiles
 
 Set environment variables (add to `~/.bashrc`):
 ```bash
-export CITY_ADDRESS=0xYourPopupCityContractAddress
+export RESIDENCY_ADDRESS=0xYourResidencyContractAddress
 export RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YourApiKey
 ```
 
@@ -402,19 +402,20 @@ Create `/home/pi/pi4-orchestrator.py`:
 """
 Pi 4 Orchestrator for the Seat Key Demo
 Connects:
-  1. PopupCity contract via cast (every 5s)
+  1. Residency contract via cast (every 5s)
   2. Arduino over /dev/ttyACM0 (LED bar + servo)
   3. Pi Zero over /dev/ttyGS0 (seat key signer)
 
 When the Zero connects, the Pi 4 sends a random challenge.
 The Zero signs it. The Pi 4 recovers the signer address and
-checks isSeated(addr) on the contract. If valid, the door unlocks.
+checks the contract: the address has staked (getMember), the residency is
+Active, and today is between startTime and endTime. If all pass, the door unlocks.
 """
 
 import asyncio, os, random, time
 
 # --- Config ---
-CONTRACT = os.environ["CITY_ADDRESS"]
+CONTRACT = os.environ["RESIDENCY_ADDRESS"]
 RPC = os.environ["RPC_URL"]
 ARDUINO_PORT = "/dev/ttyACM0"
 ZERO_PORT = "/dev/ttyGS0"
@@ -436,19 +437,22 @@ async def run_cast(*args):
     return stdout.decode().strip()
 
 async def get_seated_count():
-    """Number of staked members (via the contract's seatedCount())."""
-    result = await run_cast("call", CONTRACT, "seatedCount()(uint256)")
-    return int(result)
+    """Number of staked members (the contract's seatCount())."""
+    result = await run_cast("call", CONTRACT, "seatCount()(uint256)")
+    return int(result.split()[0])
 
 async def is_seated(addr):
-    """Check if an address is staked in an active residency."""
-    result = await run_cast("call", CONTRACT, f"isSeated(address)(bool)", addr)
-    return result.lower() == "true"
+    """True if addr has staked and the residency's dates include today."""
+    member = await run_cast("call", CONTRACT, "getMember(address)((bool,bool,bool,uint32,uint256))", addr)
+    staked = member.strip("()").split(",")[1].strip() == "true"  # (approved, staked, claimed, bedId, price)
+    start = int((await run_cast("call", CONTRACT, "startTime()(uint64)")).split()[0])
+    end = int((await run_cast("call", CONTRACT, "endTime()(uint64)")).split()[0])
+    return staked and start <= time.time() < end
 
 async def get_status():
-    """Residency status: 0=Funding, 1=Active, 2=Closed, 3=Failed."""
+    """Residency status: 0=Open, 1=Active, 2=Failed, 3=Closed."""
     result = await run_cast("call", CONTRACT, "status()(uint8)")
-    return {0: "Funding", 1: "Active", 2: "Closed", 3: "Failed"}.get(int(result), "Unknown")
+    return {0: "Open", 1: "Active", 2: "Failed", 3: "Closed"}.get(int(result), "Unknown")
 
 # --- Serial I/O ---
 
@@ -603,7 +607,7 @@ if __name__ == "__main__":
 ### 3.3 Run it
 
 ```bash
-export CITY_ADDRESS=0xYourContractAddress
+export RESIDENCY_ADDRESS=0xYourContractAddress
 export RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YourKey
 python3 /home/pi/pi4-orchestrator.py
 ```
@@ -614,13 +618,13 @@ Create `/etc/systemd/system/seat-key.service`:
 
 ```
 [Unit]
-Description=Pop-up City Seat Key Orchestrator
+Description=Residency Seat Key Orchestrator
 After=network-online.target
 
 [Service]
 ExecStart=/usr/bin/python3 /home/pi/pi4-orchestrator.py
 WorkingDirectory=/home/pi
-Environment=CITY_ADDRESS=0xYourContractAddress
+Environment=RESIDENCY_ADDRESS=0xYourContractAddress
 Environment=RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YourKey
 Restart=always
 RestartSec=10
@@ -712,8 +716,8 @@ Pi Zero:  /dev/ttyGS0
 | 0:35 | Plug the Zero into the Pi 4 | Pi screen: "Zero connected: 0xabcd... checking seat..." |
 | 0:40 | Signature verified | Servo clicks. Door swings open. LED bar blinks once. |
 | 0:50 | "Only a staked member during the residency dates can open this door." | Unplug Zero → door closes. Plug again → door opens. |
-| 1:05 | "After the city ends, isSeated returns false. The key is a paperweight." | Show endTime-passed state (pre-recorded or fast-forward) |
-| 1:15 | "The Zero only signs one format: challenge + cityAddress + ACCESS. It can't be tricked into signing a transaction." | Hold up the 20-line signing script on screen |
+| 1:05 | "After the residency's end date, the door stops honouring the key. The key is a paperweight." | Show endTime-passed state (pre-recorded or fast-forward) |
+| 1:15 | "The Zero only signs one format: challenge + residencyAddress + ACCESS. It can't be tricked into signing a transaction." | Hold up the 20-line signing script on screen |
 | 1:30 | "A pop-up city is not a permanent settlement. Its keys should not outlive it." | Close |
 
 ---
@@ -746,13 +750,13 @@ echo -e "PING\n" > /dev/ttyGS0 && cat /dev/ttyGS0
 # Expected: "PONG"
 
 # Check contract
-cast call $CITY_ADDRESS "seatedCount()(uint256)" --rpc-url $RPC_URL
+cast call $RESIDENCY_ADDRESS "seatCount()(uint256)" --rpc-url $RPC_URL
 
 # Recover address from a signed message (test on Mac)
 python3 -c "
 from eth_account import Account
 from eth_account.messages import encode_defunct
-msg = encode_defunct(text='abc' + '0xcity' + 'ACCESS')
+msg = encode_defunct(text='abc' + '0xresidency' + 'ACCESS')
 sig = '...'  # paste signature from Zero
 print(Account.recover_message(msg, signature=sig))
 "
@@ -765,10 +769,10 @@ print(Account.recover_message(msg, signature=sig))
 | File | Location | Purpose |
 |---|---|---|
 | `docs/pi-zero-seat-key-guide.md` | This file | Full setup guide |
-| `hardware/arduino/seat-key-controller/seat-key-controller.ino` | `web/hardware/arduino/` | Arduino sketch |
-| `hardware/pi-zero/zero-signer.py` | `web/hardware/pi-zero/` | Pi Zero signing daemon |
-| `hardware/pi4/pi4-orchestrator.py` | `web/hardware/pi4/` | Pi 4 main orchestrator |
-| `hardware/pi4/seat-key.service` | `web/hardware/pi4/` | systemd unit for auto-start |
+| `web/hardware/arduino/seat-key-controller.ino` | `web/hardware/arduino/` | Arduino sketch |
+| `web/hardware/pi-zero/zero-signer.py` | `web/hardware/pi-zero/` | Pi Zero signing daemon |
+| `web/hardware/pi4/pi4-orchestrator.py` | `web/hardware/pi4/` | Pi 4 main orchestrator |
+| `web/hardware/pi4/seat-key.service` | `web/hardware/pi4/` | systemd unit for auto-start |
 
 ### 7.1 Create the hardware directory
 

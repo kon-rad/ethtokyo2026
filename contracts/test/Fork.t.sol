@@ -51,11 +51,11 @@ contract ForkTest is Test {
 
         vm.startPrank(a);
         usdc.approve(address(residency), 1e6);
-        residency.stake();
+        residency.stake(1e6);
         vm.stopPrank();
         vm.startPrank(b);
         usdc.approve(address(residency), 2e6);
-        residency.stake();
+        residency.stake(2e6);
         vm.stopPrank();
 
         vm.warp(block.timestamp + 1 days);

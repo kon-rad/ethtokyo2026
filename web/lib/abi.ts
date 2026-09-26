@@ -259,6 +259,26 @@ export const residencyAbi = [
   },
   {
     "type": "function",
+    "name": "SWEEP_DELAY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "acceptHost",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "approve",
     "inputs": [
       {
@@ -374,6 +394,19 @@ export const residencyAbi = [
         "name": "",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "closedAt",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
       }
     ],
     "stateMutability": "view"
@@ -517,6 +550,19 @@ export const residencyAbi = [
   },
   {
     "type": "function",
+    "name": "pendingHost",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "revoke",
     "inputs": [
       {
@@ -544,7 +590,13 @@ export const residencyAbi = [
   {
     "type": "function",
     "name": "stake",
-    "inputs": [],
+    "inputs": [
+      {
+        "name": "expectedPrice",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
@@ -576,6 +628,26 @@ export const residencyAbi = [
   },
   {
     "type": "function",
+    "name": "sweep",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "swept",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "totalStaked",
     "inputs": [],
     "outputs": [
@@ -599,6 +671,19 @@ export const residencyAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "transferHost",
+    "inputs": [
+      {
+        "name": "newHost",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -701,6 +786,44 @@ export const residencyAbi = [
   },
   {
     "type": "event",
+    "name": "HostTransferStarted",
+    "inputs": [
+      {
+        "name": "currentHost",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newHost",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "HostTransferred",
+    "inputs": [
+      {
+        "name": "previousHost",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newHost",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Revoked",
     "inputs": [
       {
@@ -742,6 +865,19 @@ export const residencyAbi = [
       },
       {
         "name": "seatNumber",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Swept",
+    "inputs": [
+      {
+        "name": "amount",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -827,6 +963,11 @@ export const residencyAbi = [
   },
   {
     "type": "error",
+    "name": "NotPendingHost",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NoteTooLong",
     "inputs": []
   },
@@ -834,6 +975,17 @@ export const residencyAbi = [
     "type": "error",
     "name": "NothingToClaim",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PriceChanged",
+    "inputs": [
+      {
+        "name": "currentPrice",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",
@@ -853,6 +1005,17 @@ export const residencyAbi = [
         "name": "token",
         "type": "address",
         "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "SweepTooEarly",
+    "inputs": [
+      {
+        "name": "availableAt",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ]
   },

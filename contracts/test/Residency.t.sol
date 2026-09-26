@@ -66,7 +66,7 @@ contract ResidencyTest is Test {
         usdc.mint(m, price);
         vm.startPrank(m);
         usdc.approve(address(residency), price);
-        residency.stake();
+        residency.stake(price);
         vm.stopPrank();
     }
 
@@ -201,7 +201,7 @@ contract ResidencyTest is Test {
         vm.startPrank(m);
         usdc.approve(address(residency), PRICE);
         vm.expectRevert(abi.encodeWithSelector(Residency.WrongStatus.selector, Residency.Status.Failed));
-        residency.stake();
+        residency.stake(PRICE);
         vm.stopPrank();
     }
 
@@ -251,7 +251,7 @@ contract ResidencyTest is Test {
         vm.startPrank(stranger);
         usdc.approve(address(residency), PRICE);
         vm.expectRevert(Residency.NotApproved.selector);
-        residency.stake();
+        residency.stake(PRICE);
         vm.stopPrank();
     }
 
@@ -261,7 +261,7 @@ contract ResidencyTest is Test {
         vm.startPrank(a);
         usdc.approve(address(residency), PRICE);
         vm.expectRevert(Residency.AlreadyStaked.selector);
-        residency.stake();
+        residency.stake(PRICE);
         vm.stopPrank();
     }
 
@@ -276,7 +276,7 @@ contract ResidencyTest is Test {
         vm.startPrank(extra);
         usdc.approve(address(residency), PRICE);
         vm.expectRevert(Residency.ResidencyFull.selector);
-        residency.stake();
+        residency.stake(PRICE);
         vm.stopPrank();
     }
 
@@ -349,6 +349,128 @@ contract ResidencyTest is Test {
         vm.prank(a);
         vm.expectRevert(Residency.NothingToClaim.selector);
         residency.claim();
+    }
+
+    // ------------------------------------------------------------ price guard
+
+    function test_stakeRevertsIfHostChangedPrice() public {
+        address a = _member(1);
+        usdc.mint(a, 10 * PRICE);
+        vm.prank(host);
+        residency.approve(a, 1, PRICE);
+        vm.prank(a);
+        usdc.approve(address(residency), type(uint256).max);
+
+        // Host re-approves at 10x just before Alice's stake lands.
+        vm.prank(host);
+        residency.approve(a, 1, 10 * PRICE);
+
+        vm.prank(a);
+        vm.expectRevert(abi.encodeWithSelector(Residency.PriceChanged.selector, 10 * PRICE));
+        residency.stake(PRICE);
+        assertEq(usdc.balanceOf(a), 10 * PRICE);
+    }
+
+    // ------------------------------------------------------------ host transfer
+
+    function test_hostTransferIsTwoStep() public {
+        address next = makeAddr("next");
+
+        vm.prank(stranger);
+        vm.expectRevert(Residency.NotHost.selector);
+        residency.transferHost(next);
+
+        vm.prank(host);
+        residency.transferHost(next);
+        assertEq(residency.host(), host);
+        assertEq(residency.pendingHost(), next);
+
+        vm.prank(stranger);
+        vm.expectRevert(Residency.NotPendingHost.selector);
+        residency.acceptHost();
+
+        vm.prank(next);
+        residency.acceptHost();
+        assertEq(residency.host(), next);
+        assertEq(residency.pendingHost(), address(0));
+
+        // The old host has lost every host power.
+        vm.prank(host);
+        vm.expectRevert(Residency.NotHost.selector);
+        residency.cancel();
+    }
+
+    function test_newHostWithdrawsToThemselves() public {
+        _approveAndStake(1, 1, PRICE);
+        _approveAndStake(2, 2, PRICE);
+        _approveAndStake(3, 3, PRICE);
+        address next = makeAddr("next");
+        vm.prank(host);
+        residency.transferHost(next);
+        vm.prank(next);
+        residency.acceptHost();
+
+        vm.warp(deadline);
+        vm.prank(next);
+        residency.withdraw(PRICE, bytes32(0), "venue");
+        assertEq(usdc.balanceOf(next), PRICE);
+        assertEq(usdc.balanceOf(host), 0);
+    }
+
+    function test_pendingTransferCanBeCancelled() public {
+        address next = makeAddr("next");
+        vm.startPrank(host);
+        residency.transferHost(next);
+        residency.transferHost(address(0));
+        vm.stopPrank();
+        vm.prank(next);
+        vm.expectRevert(Residency.NotPendingHost.selector);
+        residency.acceptHost();
+    }
+
+    // ------------------------------------------------------------ sweep
+
+    function test_sweepAfterDelayTakesUnclaimedLeftovers() public {
+        address a = _approveAndStake(1, 1, PRICE);
+        _approveAndStake(2, 2, PRICE);
+        _approveAndStake(3, 3, PRICE);
+        vm.warp(deadline);
+        vm.startPrank(host);
+        residency.withdraw(PRICE, bytes32(0), "venue");
+        residency.close();
+        vm.stopPrank();
+
+        vm.prank(a);
+        residency.claim(); // Alice claims in time; the other two don't.
+
+        uint256 availableAt = block.timestamp + residency.SWEEP_DELAY();
+        vm.prank(host);
+        vm.expectRevert(abi.encodeWithSelector(Residency.SweepTooEarly.selector, availableAt));
+        residency.sweep();
+
+        vm.warp(availableAt);
+        vm.prank(stranger);
+        vm.expectRevert(Residency.NotHost.selector);
+        residency.sweep();
+
+        uint256 left = residency.balance();
+        vm.prank(host);
+        residency.sweep();
+        assertEq(usdc.balanceOf(host), PRICE + left);
+        assertEq(residency.balance(), 0);
+        assertEq(residency.claimable(_member(2)), 0);
+
+        vm.prank(_member(2));
+        vm.expectRevert(Residency.NothingToClaim.selector);
+        residency.claim();
+    }
+
+    function test_sweepOnlyWhenClosed() public {
+        _approveAndStake(1, 1, PRICE);
+        vm.warp(deadline + 365 days); // Failed: members' refunds are never sweepable
+        vm.prank(host);
+        vm.expectRevert(abi.encodeWithSelector(Residency.WrongStatus.selector, Residency.Status.Failed));
+        residency.sweep();
     }
 
     // ------------------------------------------------------------ fuzz

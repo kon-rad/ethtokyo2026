@@ -21,6 +21,7 @@ struct ResidencyParams {
 ///         members stake that price in USDC before the deadline, and at the deadline the residency
 ///         is either Active (enough seats: the host can withdraw against receipts) or Failed
 ///         (everyone claims a full refund). Closing returns unspent funds pro-rata to stake.
+///         The host role moves by two-step transfer; long after closing, the host can sweep what's left.
 /// @dev Unaudited. No proxy, no admin beyond the host, no external calls except the token.
 contract Residency is ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -43,8 +44,8 @@ contract Residency is ReentrancyGuard {
     uint256 public constant MIN_DURATION = 7 days;
     uint256 public constant MAX_SEATS = 500;
     uint256 public constant MAX_NOTE_LENGTH = 280;
+    uint256 public constant SWEEP_DELAY = 180 days;
 
-    address public immutable host;
     IERC20 public immutable usdc;
     bytes32 public immutable metadataHash;
     uint64 public immutable startTime;
@@ -52,6 +53,9 @@ contract Residency is ReentrancyGuard {
     uint64 public immutable deadline;
     uint32 public immutable minSeats;
     uint32 public immutable maxSeats;
+
+    address public host;
+    address public pendingHost;
 
     mapping(address => Member) private _members;
     mapping(uint32 => address) public bedHolder;
@@ -62,6 +66,8 @@ contract Residency is ReentrancyGuard {
     uint256 public closedBalance;
     bool public cancelled;
     bool public closed;
+    uint64 public closedAt;
+    bool public swept;
 
     event Approved(address indexed member, uint32 indexed bedId, uint256 price);
     event Revoked(address indexed member, uint32 indexed bedId);
@@ -70,6 +76,9 @@ contract Residency is ReentrancyGuard {
     event Withdrawn(uint256 amount, bytes32 indexed receiptHash, string note);
     event Closed(uint256 closedBalance);
     event Claimed(address indexed member, uint256 amount);
+    event HostTransferStarted(address indexed currentHost, address indexed newHost);
+    event HostTransferred(address indexed previousHost, address indexed newHost);
+    event Swept(uint256 amount);
 
     error NotHost();
     error InvalidParams();
@@ -83,6 +92,9 @@ contract Residency is ReentrancyGuard {
     error InvalidAmount();
     error NoteTooLong();
     error CloseNotAllowed();
+    error PriceChanged(uint256 currentPrice);
+    error NotPendingHost();
+    error SweepTooEarly(uint256 availableAt);
 
     modifier onlyHost() {
         if (msg.sender != host) revert NotHost();
@@ -135,7 +147,7 @@ contract Residency is ReentrancyGuard {
         if (!m.staked || m.claimed) return 0;
         Status s = status();
         if (s == Status.Failed) return m.price;
-        if (s == Status.Closed) return (closedBalance * m.price) / totalStaked;
+        if (s == Status.Closed && !swept) return (closedBalance * m.price) / totalStaked;
         return 0;
     }
 
@@ -203,18 +215,51 @@ contract Residency is ReentrancyGuard {
         if (msg.sender != host && block.timestamp < endTime) revert CloseNotAllowed();
 
         closed = true;
+        closedAt = uint64(block.timestamp);
         closedBalance = balance();
 
         emit Closed(closedBalance);
     }
 
+    /// @notice Sweep everything left SWEEP_DELAY after closing: rounding dust, shares nobody
+    ///         claimed, and USDC sent here by mistake. Unclaimed leftovers are forfeited.
+    function sweep() external onlyHost nonReentrant inStatus(Status.Closed) {
+        uint256 availableAt = uint256(closedAt) + SWEEP_DELAY;
+        if (block.timestamp < availableAt) revert SweepTooEarly(availableAt);
+        uint256 amount = balance();
+        if (amount == 0) revert InvalidAmount();
+
+        swept = true;
+        usdc.safeTransfer(host, amount);
+
+        emit Swept(amount);
+    }
+
+    /// @notice Start handing the host role to `newHost`, who must call acceptHost().
+    ///         Pass address(0) to cancel a pending transfer.
+    function transferHost(address newHost) external onlyHost {
+        pendingHost = newHost;
+        emit HostTransferStarted(host, newHost);
+    }
+
+    /// @notice Accept a pending host transfer.
+    function acceptHost() external {
+        if (msg.sender != pendingHost) revert NotPendingHost();
+        emit HostTransferred(host, msg.sender);
+        host = msg.sender;
+        pendingHost = address(0);
+    }
+
     // ------------------------------------------------------------------ members
 
     /// @notice Pay the approved price to hold your bed. Requires a USDC allowance.
-    function stake() external nonReentrant inStatus(Status.Open) {
+    ///         `expectedPrice` must match your approved price, so a last-second re-approval
+    ///         at a higher price can't charge you more than you agreed to.
+    function stake(uint256 expectedPrice) external nonReentrant inStatus(Status.Open) {
         Member storage m = _members[msg.sender];
         if (!m.approved) revert NotApproved();
         if (m.staked) revert AlreadyStaked();
+        if (m.price != expectedPrice) revert PriceChanged(m.price);
         if (seatCount >= maxSeats) revert ResidencyFull();
 
         m.staked = true;

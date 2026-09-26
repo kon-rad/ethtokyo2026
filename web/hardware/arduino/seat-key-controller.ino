@@ -1,4 +1,4 @@
-// Seat Key Controller for Pop-up City
+// Seat Key Controller for an AI City residency
 // Pi 4 sends single-character commands over USB serial.
 // LED bar on D2-D11, servo latch on D12.
 //
