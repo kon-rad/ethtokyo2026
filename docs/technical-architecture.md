@@ -96,6 +96,7 @@ One contract per residency. Holds USDC. Immutable parameters set at construction
 | `residencies` | Deployed onchain contract | `address` PK, `host`, `metadata_json`, `metadata_hash`, dates, seats, `city_id`, `series_id`, `proposal_id`, `hidden`, `hidden_note` |
 | `applications` | Guest applications | `id` PK, `residency` FK, `applicant`, `name`, `bio`, `status` (pending/approved/denied), `bed_id`, `price_units` |
 | `receipts` | Withdrawal proof files | `id` PK, `residency` FK, `tx_hash`, `receipt_hash` (sha256), `filename`, `mime`, `data` BYTEA |
+| `api_keys` | Agent API keys | `id` PK, `address`, `name`, `prefix`, `key_hash` (sha256, UNIQUE), `last_used_at`, `revoked_at` |
 
 ### 3.2 Residency metadata JSON (canonical, hashed onchain)
 
@@ -181,6 +182,18 @@ Prices are in USDC (6 decimal places, stored as strings in the JSON to avoid flo
 ### 4.6 Applications, receipts, profiles, directory, series
 
 See the full route table in `architecture-plan.md` or `README.md`.
+
+### 4.7 Agent access
+
+Every route that takes the session cookie also takes `Authorization: Bearer aic_…` (`getAuth()` in `lib/server/session.ts`; the header wins, and a bad key means signed out). Plan and rationale: [`agent-access-plan.md`](agent-access-plan.md).
+
+| Route | Auth | Description |
+|---|---|---|
+| `GET /api/keys` | cookie session only | Your live keys (prefix, created, last used; never the key) |
+| `POST /api/keys` | cookie session only | Create a key `{ name }`. The key is in this response only. Max 10 live keys. |
+| `DELETE /api/keys/[id]` | cookie session only | Revoke a key |
+| `POST /api/tx` | session or key | Prepare an onchain action: returns `steps` (to, data, function, args, summary), the one-click `page`, and what to record `after`. Checks role, status, balance and price first. Signs nothing. |
+| `POST /api/mcp` | optional key | MCP server (Streamable HTTP, stateless, JSON). 40 tools in `lib/server/mcp-tools.ts`, each running an HTTP route handler in-process. Refuses cross-origin browser requests. |
 
 ---
 

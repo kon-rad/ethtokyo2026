@@ -7,6 +7,8 @@ description: Launch a residency on AI City. Apply to a city by proposing a resid
 
 Part of the [AI City skill](../skill.md).
 
+**Over MCP** ([mcp.md](mcp.md)), the tools for this file are `propose_residency`, `list_my_proposals`, `get_proposal`, `list_my_series`, `prepare_transaction`, `record_residency_deploy`, `list_applications`, `deny_application`, `record_application_decision`, `upload_receipt`, `list_receipts`, `sync_residency_host`. They take the same fields as the HTTP calls below and return the same JSON.
+
 A residency goes through three stages:
 
 1. **Propose.** Offchain. This is your human's application to the city. Needs a verified session.
@@ -81,7 +83,7 @@ Only the proposer's wallet can deploy, and only while `status === "approved"`.
 
 **Verify:** poll `GET /api/proposals/12` until `status === "deployed"`. `residencyAddress` is the new contract, and the page is `/r/{residencyAddress}`. Offer to set up its knowledge base ([knowledge.md](knowledge.md)).
 
-*If they sign in their own wallet tool instead:* the call is `ResidencyFactory.createResidency((metadataHash, startTime, endTime, deadline, minSeats, maxSeats))` on the site's factory address, with every value copied from `proposal.metadataHash` and `proposal.params` unchanged. Get the transaction hash from them, then report it yourself:
+*If they sign in their own wallet tool instead:* get the exact call from `POST /api/tx { "action": "deploy_residency", "proposalId": 12 }` (MCP: `prepare_transaction`). It's `ResidencyFactory.createResidency(...)` with every value taken from the proposal ([transactions.md](transactions.md)). Get the transaction hash from them, then report it yourself (MCP: `record_residency_deploy`):
 
 ```
 POST /api/residencies   { "txHash": "0x…", "proposalId": 12 }
@@ -112,11 +114,13 @@ The manage page records approvals and revocations with the API itself. **Verify*
 
 Constraints to check before the hand-off: one approved guest per bed (`BedTaken`); the price defaults to the bed's listed price in `metadata.rooms`; approvals only work while the contract is `Open` (before the deadline). An approved guest has to be revoked before they can be denied.
 
-*Own wallet tool instead:* `Residency.approve(applicant, bedId, priceUnits)` with `priceUnits = parseUnits(bed.price, 6)`, or `Residency.revoke(applicant)`. Then report the hash: `{ "action": "approved" | "revoked", "txHash": "0x…" }`.
+*Own wallet tool instead:* `POST /api/tx { "action": "approve_applicant", "residency", "applicationId", "bedId" }` (or `revoke_applicant`) returns the exact call at the bed's listed price. Then report the hash: `{ "action": "approved" | "revoked", "txHash": "0x…" }` (MCP: `record_application_decision`).
 
 ## 5. Host: money
 
 Track state for your human: `GET /api/residencies?city={slug}&all=1` includes `state` (`status`, `seatCount`, `totalStaked`, `balance`, in USDC base units), or read `status()`, `seatCount()`, `balance()` on the contract.
+
+Each of these is also an `/api/tx` action (`cancel`, `withdraw`, `close`, `sweep`, `transfer_host`) if your human signs outside the site ([transactions.md](transactions.md)).
 
 | Situation | What your human does on `<BASE>/r/{address}/manage` | Undo? |
 |---|---|---|
@@ -127,4 +131,4 @@ Track state for your human: `GET /api/residencies?city={slug}&all=1` includes `s
 
 For a withdrawal you can prepare everything first: which receipt, the amount in USDC, a note that says what it paid for. Check it against `balance` (`InvalidAmount` if it exceeds it). The page hashes the file, signs `withdraw(amount, sha256(file), note)` and uploads the receipt. **Verify:** `GET /api/residencies/{address}/receipts` lists it.
 
-*Own wallet tool instead:* compute `receiptHash = sha256(fileBytes)` (viem `sha256(toHex(bytes))`), have your human sign `withdraw(parseUnits(amount, 6), receiptHash, note)`, then upload the same bytes: `POST /api/residencies/{address}/receipts` as multipart with `file` and `txHash`. A different file fails with `File doesn't match the receipt hash onchain`.
+*Own wallet tool instead:* compute `receiptHash = sha256(fileBytes)` (viem `sha256(toHex(bytes))`), get the call from `POST /api/tx { "action": "withdraw", "residency", "amount", "note", "receiptSha256" }`, have your human sign it, then upload the same bytes: `POST /api/residencies/{address}/receipts` as multipart with `file` and `txHash`. A different file fails with `File doesn't match the receipt hash onchain`.

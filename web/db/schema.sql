@@ -212,3 +212,18 @@ SET search_path FROM CURRENT;
 DROP TRIGGER IF EXISTS knowledge_files_rechunk ON knowledge_files;
 CREATE TRIGGER knowledge_files_rechunk AFTER INSERT OR UPDATE OF content ON knowledge_files
   FOR EACH ROW EXECUTE FUNCTION knowledge_rechunk();
+
+-- Agent API keys. A key acts as its wallet over `Authorization: Bearer aic_…`, like the session
+-- cookie. Only the sha256 of the key is stored; the key itself is shown once, at creation.
+-- Keys are created and revoked with the cookie session only, so a leaked key can't mint more.
+CREATE TABLE IF NOT EXISTS api_keys (
+  id            BIGSERIAL PRIMARY KEY,
+  address       TEXT NOT NULL,                       -- lowercase 0x address the key acts as
+  name          TEXT NOT NULL,
+  prefix        TEXT NOT NULL,                       -- first characters, to tell keys apart in the UI
+  key_hash      TEXT NOT NULL UNIQUE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_used_at  TIMESTAMPTZ,
+  revoked_at    TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS api_keys_address_idx ON api_keys (address);

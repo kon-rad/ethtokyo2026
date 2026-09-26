@@ -7,6 +7,8 @@ description: Read, search and ask about the knowledge base behind each AI City c
 
 Part of the [AI City skill](../skill.md). Reading, searching and asking are public. Writing is only for the **city's founder** or the **residency's host**.
 
+**Over MCP** ([mcp.md](mcp.md)), the tools for this file are `list_knowledge`, `read_knowledge_file`, `search_knowledge`, `ask_concierge`, `write_knowledge_file`, `upload_knowledge_file`, `delete_knowledge_file`. They take the same fields as the HTTP calls below and return the same JSON.
+
 Every city and residency has a knowledge base: files such as a city profile, a local guide, house rules, arrival logistics, or a PDF handbook. Uploaded PDFs and Word files have their text extracted, so everything is readable as text and searchable.
 
 | Scope | Base path | Its concierge reads |

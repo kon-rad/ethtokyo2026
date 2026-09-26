@@ -21,7 +21,7 @@ Luma for pop-up cities. Anyone can launch a city (a place and a time window, off
 | | Withdraw | Receipt file stored, sha256 checked against the event | `withdraw(amount, receiptHash, note)` |
 | | Close / claim | — | `close()` → pro-rata leftovers; `claim()` |
 
-**Agents:** people's agents can do everything the UI does, and the human signs every wallet action. Point them at `/skill.md` ([`web/public/skill.md`](web/public/skill.md)), which indexes per-task skills in `web/public/skills/`: auth, directory, launch-city, launch-residency, apply-residency, knowledge.
+**Agents:** people's agents can do everything the UI does, and the human signs every wallet action. The human creates an API key at `/me` → *Agent access*; the agent sends it as `Authorization: Bearer aic_…` to the HTTP API or to the **MCP server at `/api/mcp`** (40 tools, each running the matching route in-process). `POST /api/tx` turns any onchain action into exact calldata for the human to sign. Point agents at `/skill.md` ([`web/public/skill.md`](web/public/skill.md)), which indexes per-task skills in `web/public/skills/`: auth, mcp, transactions, directory, launch-city, launch-residency, apply-residency, knowledge. Plan: [`docs/agent-access-plan.md`](docs/agent-access-plan.md).
 
 **Knowledge bases:** each city and residency has one, stored in Postgres (`knowledge_files`, chunked into `knowledge_chunks` for full-text search). The city founder or residency host writes markdown or uploads PDF/DOCX, whose text is extracted. A residency's concierge also reads its city's files. `web/knowledge/` holds seed files loaded by `scripts/import-knowledge.mjs`.
 
@@ -59,6 +59,7 @@ pnpm dev --port 3100
 node scripts/seed-local.mjs
 node scripts/import-knowledge.mjs   # knowledge/ seed files → Postgres
 node scripts/e2e-local.mjs
+node scripts/e2e-agent.mjs          # same lifecycle driven over MCP with API keys
 ```
 
 After changing a contract: `forge build && node web/scripts/gen-abi.mjs`.
@@ -89,6 +90,7 @@ It deploys the committed `HEAD`, keeps the server's own `.env.local`, runs the m
 | `/docs` | Self-hosted documentation: concepts, guides, architecture, extropian vision |
 | `/devlog` | Build journal: what was shipped, what broke, what comes next |
 | `/blog` | Blog index |
+| `/blog/connect-your-agent` | How to connect your AI agent: API key, MCP setup, example prompts |
 | `/blog/infomorph-extropianism` | Infomorphs and Extropianism — the full vision post |
 | `/launch` | Launch a pop-up city |
 | `/cities` | Browse pop-up cities |
@@ -101,7 +103,16 @@ It deploys the committed `HEAD`, keeps the server's own `.env.local`, runs the m
 | `/r/[address]/manage` | Host dashboard: applications, withdraw, lifecycle |
 | `/people` | Public directory |
 | `/people/[address]` | Person's profile and participation |
-| `/me` | Edit your own profile |
+| `/me` | Edit your own profile; create and revoke agent API keys |
+
+## Agent endpoints
+
+| Path | Description |
+|---|---|
+| `/skill.md`, `/skills/*.md` | Agent skill files |
+| `POST /api/mcp` | MCP server (Streamable HTTP, stateless). Bearer API key. |
+| `POST /api/tx` | Prepare an onchain action as calldata for the human to sign |
+| `GET` / `POST /api/keys`, `DELETE /api/keys/[id]` | Manage API keys (browser session only) |
 
 ## Team
 

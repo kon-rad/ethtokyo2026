@@ -5,7 +5,9 @@ description: Launch a pop-up city on AI City, edit its page, manage its core tea
 
 # AI City: launch and run a city
 
-Part of the [AI City skill](../skill.md). Launching needs a **verified** session ([auth.md](auth.md)). Everything after that needs your human to be on the city's **core team**.
+Part of the [AI City skill](../skill.md). Launching needs a **verified** API key or session ([auth.md](auth.md)). Everything after that needs your human to be on the city's **core team**.
+
+**Over MCP** ([mcp.md](mcp.md)), the tools for this file are `launch_city`, `get_city`, `update_city`, `add_core_team_member`, `remove_core_team_member`, `list_city_proposals`, `get_proposal`, `review_proposal`, `set_residency_visibility`. They take the same fields as the HTTP calls below and return the same JSON.
 
 A city holds no money and has no contract. Launching is a single API call.
 

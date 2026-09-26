@@ -34,6 +34,13 @@ export async function requireSession(): Promise<Me> {
   return me;
 }
 
+/** Signed in in a browser, with the cookie. API keys can't manage API keys. */
+export async function requireCookieSession(): Promise<Me> {
+  const me = await requireSession();
+  if (me.via !== "session") fail(403, "Manage API keys from the site, signed in with your wallet");
+  return me;
+}
+
 /** Signed in, World ID verified and 18+ attested. */
 export async function requireVerified(): Promise<Me> {
   const me = await requireSession();

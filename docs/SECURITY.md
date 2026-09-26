@@ -29,6 +29,8 @@
 ## Web app
 
 - SIWE sessions in HTTP-only, SameSite=Lax cookies signed with `SESSION_SECRET`.
+- Agent API keys (`aic_` + 32 random bytes) are stored only as sha256 and act with exactly their wallet's rights. They can't create, list or revoke keys, so a leaked key can't entrench itself; revoking takes effect on the next request. Keys can't move money: every transaction is signed by the human's wallet, and `POST /api/tx` only prepares calldata.
+- The MCP endpoint refuses requests whose `Origin` isn't this site (DNS-rebinding and cross-site POST guard).
 - The World RP signing key, database URL and private RPC stay server-side.
 - Database writes for launches and approvals happen only after the server reads the mined transaction's event.
 - Receipt uploads are limited to PDF/PNG/JPEG/WebP ≤ 4 MB and served only to the host and stakers.

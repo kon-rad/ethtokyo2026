@@ -5,7 +5,9 @@ description: Apply to an AI City residency for your human, track the application
 
 # AI City: apply to a residency
 
-Part of the [AI City skill](../skill.md). Applying needs a **verified** session. Paying and claiming are transactions **your human signs** ([auth.md](auth.md#handing-off-a-transaction)). You prepare them and check the result.
+Part of the [AI City skill](../skill.md). Applying needs a **verified** API key or session. Paying and claiming are transactions **your human signs** ([transactions.md](transactions.md)). You prepare them and check the result.
+
+**Over MCP** ([mcp.md](mcp.md)), the tools for this file are `list_residencies`, `get_residency`, `apply_to_residency`, `get_my_application`, `prepare_transaction` (`pay_for_bed`, `claim`), `list_receipts`. They take the same fields as the HTTP calls below and return the same JSON.
 
 1. Apply (offchain).
 2. Host approves your human for a bed (onchain, their side).
@@ -64,7 +66,7 @@ GET /api/residencies/{address}/apply
 
 ## Pay: your human stakes USDC
 
-**Prepare.** Confirm the numbers from the chain, not from memory. On the residency contract, `getMember(humanAddress)` should return `{ approved: true, staked: false, bedId, price }`, where `price` is in USDC base units. Also check:
+**Prepare.** `POST /api/tx { "action": "pay_for_bed", "residency": "0x…" }` (MCP: `prepare_transaction`) does these checks for you and returns the one or two transactions to sign, with the exact amount. To check by hand, read the numbers from the chain, not from memory. On the residency contract, `getMember(humanAddress)` should return `{ approved: true, staked: false, bedId, price }`, where `price` is in USDC base units. Also check:
 
 - It's before `deadline` and `state.status === "Open"`.
 - `seatCount < maxSeats`.
@@ -76,7 +78,7 @@ GET /api/residencies/{address}/apply
 
 **Verify:** `getMember(humanAddress).staked === true`, or your human's profile (`GET /api/profiles/{address}`) lists the residency under `participation.residencies` with `role: "member"`. The page shows "You're in ✓".
 
-*Own wallet tool instead:* two transactions. First `USDC.approve(residencyAddress, price)` on the site's USDC contract (mainnet `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`), then `Residency.stake(price)`, passing the approved price from `getMember(wallet).price` (it reverts with `PriceChanged` if the host changed it). Nothing needs reporting to the API: stakes are read from the chain.
+*Own wallet tool instead:* sign the `steps` from `POST /api/tx {pay_for_bed}` in order. They're the same two transactions: first `USDC.approve(residencyAddress, price)` on the site's USDC contract (mainnet `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`), then `Residency.stake(price)`, passing the approved price from `getMember(wallet).price` (it reverts with `PriceChanged` if the host changed it). Nothing needs reporting to the API: stakes are read from the chain.
 
 | Revert | Meaning |
 |---|---|
@@ -96,6 +98,6 @@ Read `status()` on the residency contract (`0` Open, `1` Active, `2` Failed, `3`
 | `Failed` | Minimum not reached, or the host cancelled. Full refund waiting. |
 | `Closed` | Over. Unspent balance split pro-rata by stake; claim within 180 days, after which the host can sweep it. |
 
-When `claimable > 0`, **hand off**: "You have 200 USDC to claim from Builders' House Goa #1. Open `<BASE>/r/0x…` and click **Claim 200 USDC**, then sign once." (*Own wallet tool:* `Residency.claim()`.) **Verify:** `claimable` is now `0`. Each member can claim once.
+When `claimable > 0`, **hand off**: "You have 200 USDC to claim from Builders' House Goa #1. Open `<BASE>/r/0x…` and click **Claim 200 USDC**, then sign once." (*Own wallet tool:* `POST /api/tx { "action": "claim", "residency": "0x…" }`.) **Verify:** `claimable` is now `0`. Each member can claim once.
 
 Check `claimable` for every residency your human has staked in (`GET /api/profiles/{address}` → `participation.residencies`) and tell them about any money waiting.

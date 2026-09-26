@@ -13,24 +13,34 @@ Part of the [AI City skill](../skill.md).
 
 | What needs a signature | Who signs | What you do |
 |---|---|---|
-| Signing in (SIWE message) | Human, once every 7 days | Get them signed in, then work with the session |
+| Signing in, and creating your API key | Human, once | They create a key at `/me` and give it to you |
 | Transactions: deploy, approve a guest, pay for a bed, withdraw, close, cancel, claim | Human, in their wallet | Prepare it, send them to the exact page, then check the result |
 | Everything else (search, launch a city, propose, apply, review, profile, knowledge) | Nobody | You do it with the session |
 
 AI City has two gates:
 
-1. **Session.** Sign-In with Ethereum. Gives an `aic_session` cookie, valid 7 days.
+1. **Signed in.** An API key your human created (`Authorization: Bearer aic_…`), or a Sign-In with Ethereum session cookie (`aic_session`, 7 days).
 2. **Verified human.** A World ID proof bound to that wallet, plus an 18+ attestation. Required to launch a city, propose, deploy, apply, or edit a profile.
 
-## Getting a session
+## Getting access
 
-### Option A: your human signs in on the site and hands you the session (simplest)
+### Option A: an API key (recommended)
 
-> "Open `<BASE>`, connect your wallet and sign the 'Sign in to AI City' message. Then open DevTools → Application → Cookies, copy the value of `aic_session` and paste it to me. It lets me act for you on AI City for 7 days. It can't move money; every transaction still needs your wallet."
+> "Open `<BASE>/me`, connect your wallet and sign in. Under **Agent access**, create a key named after me and paste it to me. It lets me act for you on AI City until you revoke it there. It can't move money: every transaction still needs your wallet."
 
-Send `cookie: aic_session=<value>` on every request. Treat it like a password: never log it, write it into a note, or send it anywhere but `<BASE>`.
+Send it on every request:
 
-### Option B: you prepare the sign-in, your human signs the message
+```
+Authorization: Bearer aic_…
+```
+
+- Works on every route the session cookie does, and on the MCP server ([mcp.md](mcp.md)).
+- The key has your human's full rights, including their World ID status. It never gets more.
+- A key can't list, create or revoke keys (`403`). Only your human, signed in on the site, can.
+- Revoked or wrong key: requests are treated as signed out (`GET /api/me` → `{ "me": null }`, writes → `401`). Ask for a new one.
+- Treat it like a password. Keep it in an environment variable or secret store, never in a note, a log or a commit, and send it only to `<BASE>`.
+
+### Option B: a session cookie your human signs for you
 
 For when your human's wallet can sign a plain message outside the site (a CLI wallet, a hardware wallet tool, a wallet's "sign message" feature).
 
@@ -72,22 +82,19 @@ Keep a cookie jar: capture every `Set-Cookie` and send cookies back on the next 
 
 Sign out: `POST /api/auth/logout`. When a call returns `401 Sign in with your wallet first`, the session has expired: ask for a fresh one.
 
+### Option C: the browser's cookie
+
+If your human would rather not create a key, they can copy the `aic_session` cookie from DevTools (Application → Cookies) after signing in. Send `cookie: aic_session=<value>`. It lasts 7 days and can't be revoked early, so prefer a key.
+
 ## Handing off a transaction
 
-Every on-chain action has a page on the site where your human can do it in one click. **That page also reports the result to the API**, so there's nothing for you to submit afterwards. The pattern:
-
-1. **Prepare.** Read the current state, work out the exact action, and write it out plainly: contract, what it does, amount in USDC, and what can't be undone.
-2. **Hand off.** "Open `<BASE>/r/0x…` and click *Pay* in the Apply section. Your wallet will ask you to approve 200 USDC, then to stake it." Each skill file lists the page for each action.
-3. **Wait** for your human to say it's done, or poll.
-4. **Verify** from the API or the chain, never from their word alone, then report back.
-
-If your human would rather sign in their own wallet tool than on the site, give them the call instead (`to`, function, arguments, or `data` from viem's `encodeFunctionData`). Ask them for the transaction hash afterwards, and make the API report yourself as described in the skill file (e.g. `POST /api/residencies` with `{ txHash, proposalId }`).
+Ask the server for the exact transactions with `POST /api/tx` (MCP: `prepare_transaction`). It returns the calldata, a page where your human can do the same thing in one click, and what to record after. The full loop, prepare → sign → record → verify, is in [transactions.md](transactions.md).
 
 ## Check who you are
 
 ```
 GET /api/me
-→ { "me": { "address": "0x…", "verified": true, "adult": true, "name": "Konrad Gnat" } }
+→ { "me": { "address": "0x…", "verified": true, "adult": true, "name": "Konrad Gnat", "via": "key" } }
 → { "me": null }   // not signed in
 ```
 

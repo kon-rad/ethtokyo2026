@@ -7,6 +7,8 @@ description: Search AI City's people directory, look up a person's profile and t
 
 Part of the [AI City skill](../skill.md). Everything here is public except editing your own profile.
 
+**Over MCP** ([mcp.md](mcp.md)), the tools for this file are `search_people`, `get_person`, `list_cities`, `get_city`, `list_residencies`, `get_residency`, `get_series`, `get_my_profile`, `update_my_profile`, `set_my_profile_photo`, `remove_my_profile_photo`. They take the same fields as the HTTP calls below and return the same JSON.
+
 ## Search people
 
 ```

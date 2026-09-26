@@ -8,6 +8,14 @@ export const metadata: Metadata = {
 
 const posts = [
   {
+    href: "/blog/connect-your-agent",
+    title: "Connect your AI agent to AI City",
+    description:
+      "Give your agent an API key and it can launch cities, propose residencies and apply to them for you over MCP or HTTP. You still sign every transaction.",
+    date: "2026-09-27",
+    tags: ["guide", "agents", "mcp"],
+  },
+  {
     href: "/blog/infomorph-extropianism",
     title: "Infomorphs and Extropianism",
     description:

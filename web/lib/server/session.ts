@@ -1,8 +1,9 @@
 import "server-only";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import { getAddress, type Address } from "viem";
 import { sql } from "../db";
+import { addressForApiKey } from "./api-keys";
 
 const SESSION_COOKIE = "aic_session";
 const NONCE_COOKIE = "aic_nonce";
@@ -53,6 +54,23 @@ export async function endSession(): Promise<void> {
   (await cookies()).delete(SESSION_COOKIE);
 }
 
+/** How this request is signed in: the browser's cookie, or an agent's API key. */
+export type AuthVia = "session" | "key";
+
+/**
+ * The signed-in wallet. An `Authorization: Bearer aic_…` header wins over the cookie; a bad key
+ * is a signed-out request, never a fallback to the cookie.
+ */
+export async function getAuth(): Promise<{ address: Address; via: AuthVia } | null> {
+  const bearer = (await headers()).get("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
+  if (bearer) {
+    const address = await addressForApiKey(bearer);
+    return address ? { address, via: "key" } : null;
+  }
+  const address = await getSessionAddress();
+  return address ? { address, via: "session" } : null;
+}
+
 export async function getSessionAddress(): Promise<Address | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -65,14 +83,15 @@ export async function getSessionAddress(): Promise<Address | null> {
 }
 
 /** `name` is set once the wallet has a directory profile. */
-export type Me = { address: Address; verified: boolean; adult: boolean; name: string | null };
+export type Me = { address: Address; verified: boolean; adult: boolean; name: string | null; via: AuthVia };
 
 export async function getMe(): Promise<Me | null> {
-  const address = await getSessionAddress();
-  if (!address) return null;
+  const auth = await getAuth();
+  if (!auth) return null;
+  const { address, via } = auth;
   const [row] = await sql<{ verified_at: Date | null; adult_attested_at: Date | null; name: string | null }[]>`
     SELECT u.verified_at, u.adult_attested_at, p.name
     FROM users u LEFT JOIN profiles p ON p.address = u.address
     WHERE u.address = ${address.toLowerCase()}`;
-  return { address, verified: !!row?.verified_at, adult: !!row?.adult_attested_at, name: row?.name ?? null };
+  return { address, verified: !!row?.verified_at, adult: !!row?.adult_attested_at, name: row?.name ?? null, via };
 }

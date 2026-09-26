@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* `prose` on docs, blog and devlog pages. Without it Tailwind's reset strips all heading and paragraph spacing. */
+@plugin "@tailwindcss/typography";
 
 /* Light, Luma-like palette. Tokens are exposed to Tailwind as bg-surface, text-muted, etc. */
 :root {
@@ -33,4 +35,33 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Long-form pages: palette colours, no backticks around inline code, anchors clear the sticky header. */
+.prose {
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-links: var(--foreground);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-bullets: var(--muted);
+  --tw-prose-counters: var(--muted);
+  --tw-prose-hr: var(--line);
+  --tw-prose-th-borders: var(--line);
+  --tw-prose-td-borders: var(--line);
+  --tw-prose-pre-bg: #f9fafb;
+  --tw-prose-pre-code: var(--foreground);
+}
+.prose :where(code):not(:where(pre *))::before,
+.prose :where(code):not(:where(pre *))::after {
+  content: none;
+}
+.prose :where(code):not(:where(pre *)) {
+  border-radius: 0.25rem;
+  background: var(--accent-soft);
+  padding: 0.1em 0.35em;
+  font-weight: 500;
+}
+.prose :where([id]) {
+  scroll-margin-top: 6rem;
 }

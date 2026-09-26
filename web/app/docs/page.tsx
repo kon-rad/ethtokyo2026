@@ -38,6 +38,19 @@ const sections = [
     ],
   },
   {
+    id: "agents",
+    title: "For agents",
+    items: [
+      { id: "connect-agent", title: "Connect your agent (quickstart)" },
+      { id: "agents-overview", title: "What agents can do" },
+      { id: "api-keys", title: "API keys" },
+      { id: "mcp", title: "MCP server" },
+      { id: "mcp-tools", title: "MCP tools" },
+      { id: "agent-transactions", title: "Transactions: prepare, sign, record" },
+      { id: "agent-skills", title: "Skill files" },
+    ],
+  },
+  {
     id: "architecture",
     title: "Architecture",
     items: [
@@ -303,6 +316,319 @@ export default function DocsPage() {
               <li><strong>Closed:</strong> call <code>claim()</code> to get your pro-rata share of unspent funds. Claim within 180 days: after that the host can sweep what&apos;s unclaimed.</li>
               <li>Each address can claim once. The residency page shows your claimable amount.</li>
             </ul>
+          </section>
+
+          {/* ==================== For agents ==================== */}
+          <section id="agents">
+            <h2 className="text-2xl font-semibold tracking-tight">For agents</h2>
+
+            <h3 id="connect-agent">Connect your agent (quickstart)</h3>
+            <ol>
+              <li>
+                Sign in and verify with World ID. Your agent inherits your verification.
+              </li>
+              <li>
+                On <Link href="/me">your profile</Link>, under <strong>Agent access</strong>, create a key and copy it (it
+                starts with <code>aic_</code> and is shown once).
+              </li>
+              <li>
+                Connect your agent. For Claude Code, run the command below. For Claude Desktop, Cursor or another MCP client,
+                use the JSON config under <a href="#mcp">MCP server</a>. For any other agent, point it at{" "}
+                <a href="/skill.md">/skill.md</a> and give it the key.
+              </li>
+              <li>
+                Ask it &quot;Use ai-city&apos;s whoami. Am I verified?&quot;, then give it real work: launch a city,
+                propose a residency, apply for a bed.
+              </li>
+            </ol>
+            <pre>
+              <code>{`claude mcp add --transport http ai-city https://aicity.cyou/api/mcp \\
+  --header "Authorization: Bearer $AICITY_API_KEY"`}</code>
+            </pre>
+            <p>
+              The walkthrough, with example prompts, is in the blog post{" "}
+              <Link href="/blog/connect-your-agent">Connect your AI agent to AI City</Link>.
+            </p>
+
+            <h3 id="agents-overview">What agents can do</h3>
+            <p>
+              Everything you can do in the app, your AI agent can do for you: launch a city, run its core team, propose and
+              run a residency, apply to one, manage your profile and edit knowledge bases. There are three ways in, and they
+              all run the same code, so the rules and error messages are identical:
+            </p>
+            <ul>
+              <li>
+                <strong>MCP server</strong> at <code>/api/mcp</code>, for Claude Code, Claude Desktop, Cursor and any other
+                MCP client.
+              </li>
+              <li>
+                <strong>HTTP API</strong>, for anything that can make a request. Every call is listed in{" "}
+                <a href="/skill.md">/skill.md</a>.
+              </li>
+              <li>
+                <strong>Skill files</strong> at <a href="/skill.md">/skill.md</a>, which describe each flow step by step for
+                an agent to follow.
+              </li>
+            </ul>
+            <p>
+              Three things stay with you. Agents can&apos;t sign in or create keys, can&apos;t do World ID verification, and
+              can&apos;t sign transactions. An agent prepares every transaction and you sign it in your wallet.
+            </p>
+
+            <h3 id="api-keys">API keys</h3>
+            <ol>
+              <li>Sign in, open <Link href="/me">your profile</Link> and find <strong>Agent access</strong>.</li>
+              <li>Name the key after the agent that will use it and click <strong>Create key</strong>.</li>
+              <li>Copy the key (it starts with <code>aic_</code>). It&apos;s shown once; after that you only see its prefix.</li>
+              <li>Give it to your agent. It sends it on every request as <code>Authorization: Bearer aic_…</code>.</li>
+            </ol>
+            <p>
+              A key has exactly your rights, including your World ID status, and nothing more. It can&apos;t create or revoke
+              other keys, and it can&apos;t move money. Revoke it from the same card at any time, and requests with it are
+              treated as signed out from then on. You can have up to 10 keys.
+            </p>
+
+            <h3 id="mcp">MCP server</h3>
+            <p>
+              The endpoint is <code>/api/mcp</code> on this site. It uses the Streamable HTTP transport, is stateless, and
+              answers every request with plain JSON. Public tools work without a key.
+            </p>
+            <p>
+              <strong>Claude Code:</strong>
+            </p>
+            <pre>
+              <code>{`claude mcp add --transport http ai-city https://aicity.cyou/api/mcp \\
+  --header "Authorization: Bearer $AICITY_API_KEY"`}</code>
+            </pre>
+            <p>
+              <strong>Clients with a JSON config</strong> (Claude Desktop, Cursor):
+            </p>
+            <pre>
+              <code>{`{
+  "mcpServers": {
+    "ai-city": {
+      "type": "http",
+      "url": "https://aicity.cyou/api/mcp",
+      "headers": { "Authorization": "Bearer aic_…" }
+    }
+  }
+}`}</code>
+            </pre>
+            <p>
+              A failed tool call returns <code>isError: true</code> with the same message the app would show, such as{" "}
+              <code>Error 403: Verify you&apos;re a human over 18 first</code>. Full reference:{" "}
+              <a href="/skills/mcp.md">/skills/mcp.md</a>.
+            </p>
+
+            <h3 id="mcp-tools">MCP tools</h3>
+            <p>
+              40 tools. <em>Key</em> means any valid API key. <em>Verified</em> means the key&apos;s wallet has passed World
+              ID and is 18+. A role (core team, host, proposer) means the wallet must hold it.
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Tool</th>
+                  <th>Does</th>
+                  <th>Access</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={3} className="pt-4 font-semibold">Account and directory</td>
+                </tr>
+                <tr>
+                  <td><code>whoami</code></td>
+                  <td>Wallet, verification and name for this key</td>
+                  <td>Public</td>
+                </tr>
+                <tr>
+                  <td><code>get_my_profile</code> <code>update_my_profile</code></td>
+                  <td>Read or write your directory profile</td>
+                  <td>Key / Verified</td>
+                </tr>
+                <tr>
+                  <td><code>set_my_profile_photo</code> <code>remove_my_profile_photo</code></td>
+                  <td>Profile photo (base64)</td>
+                  <td>Key</td>
+                </tr>
+                <tr>
+                  <td><code>search_people</code> <code>get_person</code></td>
+                  <td>Search the directory, read a profile</td>
+                  <td>Public</td>
+                </tr>
+                <tr>
+                  <td colSpan={3} className="pt-4 font-semibold">Launching a city</td>
+                </tr>
+                <tr>
+                  <td><code>list_cities</code> <code>get_city</code></td>
+                  <td>Browse cities, see your role</td>
+                  <td>Public</td>
+                </tr>
+                <tr>
+                  <td><code>launch_city</code></td>
+                  <td>Create a city; you become its founder</td>
+                  <td>Verified</td>
+                </tr>
+                <tr>
+                  <td><code>update_city</code></td>
+                  <td>Edit a city&apos;s details</td>
+                  <td>Core team</td>
+                </tr>
+                <tr>
+                  <td><code>add_core_team_member</code> <code>remove_core_team_member</code></td>
+                  <td>Manage the core team</td>
+                  <td>Core team / Founder</td>
+                </tr>
+                <tr>
+                  <td><code>list_city_proposals</code> <code>review_proposal</code></td>
+                  <td>See and approve or reject residency proposals</td>
+                  <td>Core team</td>
+                </tr>
+                <tr>
+                  <td><code>set_residency_visibility</code></td>
+                  <td>Hide or show a residency in the city</td>
+                  <td>Core team</td>
+                </tr>
+                <tr>
+                  <td colSpan={3} className="pt-4 font-semibold">Launching a residency</td>
+                </tr>
+                <tr>
+                  <td><code>propose_residency</code></td>
+                  <td>Apply to a city with rooms, beds, prices and dates</td>
+                  <td>Verified</td>
+                </tr>
+                <tr>
+                  <td><code>list_my_proposals</code> <code>get_proposal</code></td>
+                  <td>Track a proposal</td>
+                  <td>Key / Proposer</td>
+                </tr>
+                <tr>
+                  <td><code>list_my_series</code> <code>get_series</code></td>
+                  <td>Residency series</td>
+                  <td>Key / Public</td>
+                </tr>
+                <tr>
+                  <td><code>record_residency_deploy</code></td>
+                  <td>Report the deploy transaction</td>
+                  <td>Proposer</td>
+                </tr>
+                <tr>
+                  <td><code>list_applications</code> <code>deny_application</code></td>
+                  <td>Review applicants</td>
+                  <td>Host</td>
+                </tr>
+                <tr>
+                  <td><code>record_application_decision</code></td>
+                  <td>Report an approve or revoke transaction</td>
+                  <td>Host</td>
+                </tr>
+                <tr>
+                  <td><code>upload_receipt</code> <code>list_receipts</code></td>
+                  <td>Receipts behind withdrawals</td>
+                  <td>Host / Paid guests</td>
+                </tr>
+                <tr>
+                  <td><code>sync_residency_host</code></td>
+                  <td>Sync the host after a handover</td>
+                  <td>Public</td>
+                </tr>
+                <tr>
+                  <td colSpan={3} className="pt-4 font-semibold">Applying to a residency</td>
+                </tr>
+                <tr>
+                  <td><code>list_residencies</code> <code>get_residency</code></td>
+                  <td>Browse residencies, beds and prices</td>
+                  <td>Public</td>
+                </tr>
+                <tr>
+                  <td><code>apply_to_residency</code></td>
+                  <td>Apply for a bed</td>
+                  <td>Verified</td>
+                </tr>
+                <tr>
+                  <td><code>get_my_application</code></td>
+                  <td>Track your application</td>
+                  <td>Key</td>
+                </tr>
+                <tr>
+                  <td colSpan={3} className="pt-4 font-semibold">Onchain actions</td>
+                </tr>
+                <tr>
+                  <td><code>prepare_transaction</code></td>
+                  <td>Calldata for deploy, approve, revoke, pay, withdraw, cancel, close, sweep, host transfer, claim</td>
+                  <td>Key + role</td>
+                </tr>
+                <tr>
+                  <td colSpan={3} className="pt-4 font-semibold">Knowledge and concierge</td>
+                </tr>
+                <tr>
+                  <td><code>list_knowledge</code> <code>read_knowledge_file</code> <code>search_knowledge</code></td>
+                  <td>Read a city&apos;s or residency&apos;s knowledge base</td>
+                  <td>Public</td>
+                </tr>
+                <tr>
+                  <td><code>ask_concierge</code></td>
+                  <td>Ask the concierge a question</td>
+                  <td>Public</td>
+                </tr>
+                <tr>
+                  <td><code>write_knowledge_file</code> <code>upload_knowledge_file</code> <code>delete_knowledge_file</code></td>
+                  <td>Edit the knowledge base</td>
+                  <td>Founder / Host</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h3 id="agent-transactions">Transactions: prepare, sign, record</h3>
+            <p>
+              For anything onchain, the agent calls <code>prepare_transaction</code> (or <code>POST /api/tx</code>) with an
+              action such as <code>pay_for_bed</code>. The server checks the same rules the contract does (your role, the
+              residency&apos;s status, your USDC balance, the approved price) and returns:
+            </p>
+            <ul>
+              <li>
+                <strong>steps</strong>: each transaction&apos;s <code>to</code>, <code>data</code>, function, arguments and a
+                one-line summary, in order;
+              </li>
+              <li>
+                <strong>page</strong>: where you can do the same thing in one click in the app;
+              </li>
+              <li>
+                <strong>after</strong>: what the agent reports once it&apos;s mined, e.g. <code>record_residency_deploy</code>{" "}
+                with the transaction hash.
+              </li>
+            </ul>
+            <p>
+              You sign, either on the page or in your own wallet tool. The agent then records the hash where the action
+              needs it, and checks the result against the API or the chain. The server only records what it reads from the
+              mined transaction, so the database never gets ahead of the chain. Full reference:{" "}
+              <a href="/skills/transactions.md">/skills/transactions.md</a>.
+            </p>
+
+            <h3 id="agent-skills">Skill files</h3>
+            <p>
+              Point any agent at <a href="/skill.md">/skill.md</a>. It&apos;s an installable skill (with
+              <code>name</code> and <code>description</code> frontmatter) that indexes one file per task:
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Covers</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><a href="/skills/auth.md">auth.md</a></td><td>API keys, verification, what only the human can do</td></tr>
+                <tr><td><a href="/skills/mcp.md">mcp.md</a></td><td>Connecting to the MCP server, every tool</td></tr>
+                <tr><td><a href="/skills/transactions.md">transactions.md</a></td><td>Every onchain action, prepare → sign → record → verify</td></tr>
+                <tr><td><a href="/skills/launch-city.md">launch-city.md</a></td><td>Launch and run a city, review proposals</td></tr>
+                <tr><td><a href="/skills/launch-residency.md">launch-residency.md</a></td><td>Propose, deploy and host a residency</td></tr>
+                <tr><td><a href="/skills/apply-residency.md">apply-residency.md</a></td><td>Apply, pay for a bed, claim refunds</td></tr>
+                <tr><td><a href="/skills/directory.md">directory.md</a></td><td>People, cities, residencies, your profile</td></tr>
+                <tr><td><a href="/skills/knowledge.md">knowledge.md</a></td><td>Knowledge bases and the concierge</td></tr>
+              </tbody>
+            </table>
           </section>
 
           {/* ==================== Architecture ==================== */}
