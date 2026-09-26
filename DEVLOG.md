@@ -14,7 +14,7 @@ This is the internal log. The public build journal at `/devlog` (`web/app/devlog
 | Deployment | **Sepolia only.** Factory `0x7A2E3f097Abd3c1a59D5a762f29d1f02E5A63f89`, mock USDC `0x0abd146eb01d8b923c2162489e006b7b01c77a57`, deploy block 11787037. Not on mainnet yet. |
 | Web app | Next.js 16 in `web/`. City layer, proposals, residencies, directory, profiles, docs, blog, devlog, board, concierge, knowledge bases. Runs locally on port 3100. **Live (Sepolia)** at https://aicity.cyou on the shared droplet; sign-in works, verification doesn't yet (World ID not configured); deploy with `web/scripts/deploy-droplet.sh`. |
 | E2E | `web/scripts/e2e-local.mjs` 53/53 and `web/scripts/e2e-agent.mjs` 40/40 (MCP + API keys), both passing 2026-09-27 against anvil. |
-| Uncommitted | Agent access (API keys, `/api/mcp`, `/api/tx`, skills, docs formatting). Pi 4 seat-key door (`pi4-door.py`, `aicity-door.service`, Zero `DOOR` command, `docs/pi4-door-kiosk-setup.md`). |
+| Uncommitted | Pi 4 seat-key door (`pi4-door.py`, `aicity-door.service`, Zero `DOOR` command, `docs/pi4-door-kiosk-setup.md`). |
 
 **Doc drift to fix:** `docs/master-plan.md` §4 says contracts are on mainnet and the app is on Vercel; neither is true yet. `docs/SECURITY.md` says 28 unit tests and 37 e2e checks; the latest counts are 30 contract tests and 53 e2e checks.
 
@@ -23,7 +23,7 @@ This is the internal log. The public build journal at `/devlog` (`web/app/devlog
 ---
 
 ## 2026-09-27 — Agent access: API keys, MCP server, transaction prep; docs formatting
-**Commit:** uncommitted
+**Commit:** `e15eb42`, deployed to https://aicity.cyou (Sepolia) the same day
 
 - **API keys.** `api_keys` table (`web/db/schema.sql`, sha256 of the key only). `lib/server/api-keys.ts`. `getAuth()` in `lib/server/session.ts` accepts `Authorization: Bearer aic_…` everywhere the cookie works; the header wins, and a bad key means signed out. `Me` gained `via: "session" | "key"`. `GET/POST /api/keys` and `DELETE /api/keys/[id]` use `requireCookieSession()`, so a key can't mint or revoke keys. Limit: 10 live keys. "Agent access" card on `/me`: create, copy once, revoke.
 - **`POST /api/tx`** (`lib/server/tx.ts`): the calldata for every onchain button (`deploy_residency`, `approve_applicant`, `revoke_applicant`, `pay_for_bed` = USDC approve + stake, `withdraw`, `cancel`, `close`, `sweep`, `transfer_host`, `accept_host`, `claim`), plus the one-click `page` and what to record `after`. It checks role, status, balance and approved price first, so an agent gets the UI's error instead of a revert. Ids are coerced, since list endpoints return them as strings.
