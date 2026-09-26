@@ -63,6 +63,16 @@ node scripts/e2e-local.mjs
 
 After changing a contract: `forge build && node web/scripts/gen-abi.mjs`.
 
+## Deploy the Sepolia build (shared droplet)
+
+The live test instance runs on Sepolia on a shared DigitalOcean droplet (PM2 `ai-city-web` on port 3300, nginx in front, local Postgres). It builds on your machine, because the droplet's memory is shared with other apps:
+
+```bash
+AICITY_DEPLOY_SERVER=root@<host> AICITY_DEPLOY_SSH_KEY=~/.ssh/<key> web/scripts/deploy-droplet.sh
+```
+
+It deploys the committed `HEAD`, keeps the server's own `.env.local`, runs the migration and restarts. One-time server setup is in the script's header.
+
 ## Deploy to mainnet
 
 1. World Developer Portal: create the app, note `app_id`, `rp_id` and the signing key; create action `ai-city-verify-human`.
