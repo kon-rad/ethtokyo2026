@@ -13,7 +13,7 @@ export default async function BoardPage({ params }: PageProps<"/r/[address]/boar
   if (!residency) notFound();
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-black">
+    <div className="fixed inset-0 z-50 overflow-hidden bg-black">
       <BoardClient residency={residency} />
     </div>
   );

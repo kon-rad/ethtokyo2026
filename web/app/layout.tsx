@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
+import { NotOnBoard } from "@/components/not-on-board";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -20,9 +21,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full">
         <Providers>
           <div className="flex min-h-screen flex-col">
-            <Header />
+            <NotOnBoard>
+              <Header />
+            </NotOnBoard>
             <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">{children}</main>
-            <Footer />
+            <NotOnBoard>
+              <Footer />
+            </NotOnBoard>
           </div>
         </Providers>
       </body>

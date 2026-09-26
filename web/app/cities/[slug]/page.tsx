@@ -11,6 +11,7 @@ import { ResidencyGrid } from "@/components/residency-grid";
 import { LocalDate } from "@/components/countdown";
 import { LinkButton, Notice, Card, Pill } from "@/components/ui";
 import { ConciergePanel } from "@/components/concierge-panel";
+import { CityCalendar } from "@/components/city-calendar";
 import type { CityDto } from "@/lib/server/cities";
 import type { ProposalDto } from "@/lib/server/proposals";
 
@@ -74,6 +75,8 @@ export default function CityPage({ params }: PageProps<"/cities/[slug]">) {
             <h2 className="text-lg font-semibold">About</h2>
             <p className="whitespace-pre-line text-foreground/90">{city.description}</p>
           </section>
+
+          <CityCalendar slug={slug} />
 
           <section className="space-y-3">
             <div className="flex items-end justify-between gap-4">
