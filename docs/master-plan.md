@@ -72,7 +72,7 @@ The "extropian differential acceleration perspective" in the mission statement m
 
 ## 4. Current status
 
-- **Contracts:** `Residency.sol` + `ResidencyFactory.sol` on Ethereum mainnet. 25 tests pass (unit, fuzz, invariant, mainnet fork with real USDC).
+- **Contracts:** `Residency.sol` + `ResidencyFactory.sol` on Ethereum mainnet (factory `0x0Abd146EB01d8b923C2162489E006b7b01C77A57`, deployed 2026-09-27). 30 tests pass (unit, fuzz, invariant, mainnet fork with real USDC).
 - **Web app:** Next.js 16, deployed on Vercel. Pages: home, cities, city detail + manage + propose, proposals, residency detail + manage + apply, series, directory, person profile, profile edit.
 - **Identity:** World ID Proof of Human via IDKit 4.x + self-attested 18+. SIWE sessions.
 - **Database:** Postgres (Neon). Schema: users, profiles, cities, core team, residency series, proposals, residencies, applications, receipts.
@@ -83,7 +83,7 @@ The "extropian differential acceleration perspective" in the mission statement m
 
 | Horizon | What |
 |---|---|
-| **Now** (ETHGlobal Tokyo, Sep 2026) | Residency MVP live on mainnet. One smoke-test residency at 1 USDC. |
+| **Now** (ETHGlobal Tokyo, Sep 2026) | Residency MVP live on mainnet at https://aicity.cyou (shared droplet, not Vercel yet). One smoke-test residency at 1 USDC still to run. |
 | **Edge City Goa** (Oct–Nov 2026) | City vault, city concierge agent, intents export from Argo, Reachy as house robot, drone budget. First real city with multiple residencies. |
 | **Near** (Q1 2027) | ZK practice proofs for weighted access, journal inheritance, multi-city persona management. |
 | **Medium** (2027) | Cities that fork at close, portable infomorph between cities, city compute (shared GPU with per-member encryption). |

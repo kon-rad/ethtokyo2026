@@ -64,9 +64,9 @@ node scripts/e2e-agent.mjs          # same lifecycle driven over MCP with API ke
 
 After changing a contract: `forge build && node web/scripts/gen-abi.mjs`.
 
-## Deploy the Sepolia build (shared droplet)
+## Deploy the web app (shared droplet)
 
-The live test instance runs on Sepolia on a shared DigitalOcean droplet (PM2 `ai-city-web` on port 3300, nginx in front, local Postgres). It builds on your machine, because the droplet's memory is shared with other apps:
+The live instance runs on Ethereum mainnet on a shared DigitalOcean droplet (PM2 `ai-city-web` on port 3300, nginx in front, local Postgres). It builds on your machine, because the droplet's memory is shared with other apps:
 
 ```bash
 AICITY_DEPLOY_SERVER=root@<host> AICITY_DEPLOY_SSH_KEY=~/.ssh/<key> web/scripts/deploy-droplet.sh
@@ -75,6 +75,10 @@ AICITY_DEPLOY_SERVER=root@<host> AICITY_DEPLOY_SSH_KEY=~/.ssh/<key> web/scripts/
 It deploys the committed `HEAD`, keeps the server's own `.env.local`, runs the migration and restarts. One-time server setup is in the script's header.
 
 ## Deploy to mainnet
+
+**Deployed 2026-09-27.** `ResidencyFactory` [`0x0Abd146EB01d8b923C2162489E006b7b01C77A57`](https://etherscan.io/address/0x0Abd146EB01d8b923C2162489E006b7b01C77A57) on Ethereum mainnet, block 26064603, real USDC `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`. The factory has no owner. Redeploying means a new factory address in the server env.
+
+Steps as run (or to repeat):
 
 1. World Developer Portal: create the app, note `app_id`, `rp_id` and the signing key; create action `ai-city-verify-human`.
 2. `cd contracts && forge script script/Deploy.s.sol --tc Deploy --rpc-url mainnet --ledger --broadcast --verify` (hardware wallet; `ETHERSCAN_API_KEY` set). Note the factory address and block.

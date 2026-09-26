@@ -11,16 +11,60 @@ This is the internal log. The public build journal at `/devlog` (`web/app/devlog
 | Area | State |
 |---|---|
 | Contracts | `Residency.sol` + `ResidencyFactory.sol`. 30 Foundry tests (unit, fuzz, invariant, mainnet fork). Unaudited. |
-| Deployment | **Sepolia only.** Factory `0x7A2E3f097Abd3c1a59D5a762f29d1f02E5A63f89`, mock USDC `0x0abd146eb01d8b923c2162489e006b7b01c77a57`, deploy block 11787037. Not on mainnet yet. |
-| Web app | Next.js 16 in `web/`. City layer, proposals, residencies, directory, profiles, docs, blog, devlog, board, concierge, knowledge bases. Runs locally on port 3100. **Live (Sepolia)** at https://aicity.cyou on the shared droplet; sign-in works, verification doesn't yet (World ID not configured); deploy with `web/scripts/deploy-droplet.sh`. |
+| Deployment | **Ethereum mainnet** since 2026-09-27: factory `0x0Abd146EB01d8b923C2162489E006b7b01C77A57`, block 26064603, real USDC `0xA0b8…eB48`, deployer `0xff7b…7E64` (the Sepolia keystore; the factory has no owner). Not source-verified yet. Old Sepolia: factory `0x7A2E3f097Abd3c1a59D5a762f29d1f02E5A63f89`, mock USDC at the same address as the mainnet factory (same deployer, nonce 0), block 11787037. |
+| Web app | Next.js 16 in `web/`. City layer, proposals, residencies, directory, profiles, docs, blog, devlog, board, concierge, knowledge bases. Runs locally on port 3100. **Live (mainnet)** at https://aicity.cyou on the shared droplet. |
 | E2E | `web/scripts/e2e-local.mjs` 53/53 and `web/scripts/e2e-agent.mjs` 40/40 (MCP + API keys), both passing 2026-09-27 against anvil. |
-| Uncommitted | Pi 4 seat-key door (`pi4-door.py`, `aicity-door.service`, Zero `DOOR` command, `docs/pi4-door-kiosk-setup.md`). |
+| Uncommitted | Pi 4 seat-key door, Zero signer, board (committed `517d255`). |
+| Blog | 3 posts: infomorph-extropianism (vision), connect-your-agent (guide), ai-city-app (product + philosophy). |
 
-**Doc drift to fix:** `docs/master-plan.md` §4 says contracts are on mainnet and the app is on Vercel; neither is true yet. `docs/SECURITY.md` says 28 unit tests and 37 e2e checks; the latest counts are 30 contract tests and 53 e2e checks.
-
-**Next up (from the README and master plan):** a World ID staging app for the live instance; then mainnet deploy with a hardware wallet, Neon + Vercel, 1 USDC smoke-test city, then the Edge City Goa scope (city vault, concierge agents, Reachy house robot, drone budget).
+**Next up:** World ID for the live instance, the 1 USDC smoke-test city on mainnet, source verification, Edge City Goa scope (city vault, concierge agents, Reachy house robot, drone budget).
 
 ---
+
+## 2026-09-27 — App overview doc + product blog post
+**Commit:** `dd864d3`
+
+---
+
+## 2026-09-27 — App overview doc + product blog post
+**Commit:** `dd864d3`
+
+- `docs/app-overview.md`: standalone doc describing AI City and its connection to Extropianism, Infomorphism, the Sovereign Individual, and the Network State. Covers what the app does, the two-layer model, and what's live on mainnet today.
+- `/blog/ai-city-app` (`web/app/blog/ai-city-app/page.tsx`): blog post — "AI City: A coordination primitive for the network state". Product-focused counterpart to the existing infomorph-extropianism vision post. Covers extropian principles applied, the infomorph stack grouping layer, the sovereign individual thesis, and how pop-up cities compress the network state arc.
+- Blog index (`web/app/blog/page.tsx`): added the new post as the first listing.
+- DEVLOG.md: updated current state table (blog count, cleaned up stale items).
+- Verified: `tsc --noEmit` clean. Commit pushed to `origin/city-layer` (`dd864d3`). **Not deployed to the droplet** — Konrad's deploy credentials are needed.
+
+---
+
+## 2026-09-27 — Board shows who's in the house, from signed check-ins at the door
+**Commit:** `6ccec1c` (web, deployed to https://aicity.cyou); `web/hardware/pi4/pi4-door.py` changes uncommitted with the rest of the door
+
+- `door_checkins` table (`web/db/schema.sql`): one row per key insertion that opened the door, `direction` alternating in/out per wallet, `challenge` UNIQUE so each is single-use.
+- `web/lib/server/door.ts`: `issueChallenge()` makes a 32-byte challenge (8-byte issue time, 8 random bytes, 16-byte HMAC keyed from `SESSION_SECRET`), so there's no table of open challenges; valid 5 minutes. `recordCheckin()` checks the HMAC and age, recovers the signer from `doorMessage()` (same text as the Zero and door sign), and inserts the toggled direction. `getPresence()` returns who's inside plus the last 8 events. It shows a name only for a listed profile, and a seat as `Host` or the bed from an approved application.
+- Routes: `GET /api/residencies/[address]/door/challenge`, `GET` / `POST /api/residencies/[address]/door/checkins`. README tables updated.
+- Board (`/r/[address]/board`): an "In the house" row (name, short wallet, seat), polled every 5 s, and the latest door events at the front of the activity strip.
+- `pi4-door.py`: gets the challenge from the app (origin from `board-url.txt`, or `APP_URL`), opens the latch, then posts the signature while it's open. If the app is unreachable it falls back to a local challenge and still opens, unrecorded. `APP_URL` added to `door.env.example`.
+- Verified: `tsc --noEmit` clean; `pnpm lint` is 37 problems before and after (none in the changed files). Against the local dev server, the API test covered in, out and in again, a replayed challenge (409) and a forged one (400). The first run found challenges issued in the same second were identical, so the random bytes were added. The real `zero-tx-signer.py` and `pi4-door.handle_key()` were run over a pty pair against localhost (servo stubbed) and recorded an out and an in. A 480×320 headless Chrome screenshot of the board showed the row fitting. Live: the challenge route answers, `/door/checkins` returns empty, the board is 200, and the Pi's kiosk was restarted onto the new build.
+- **Known gaps:** the new `pi4-door.py` is staged at `~/pi4-door.py` on the Pi 4; installing it into `/opt/aicity-door` needs sudo with Konrad's password. The Zero wallet `0x2C0a…f798` has no profile, so the board shows its address, not a name. Presence is public, like the board: anyone with the URL can see who's in the house. Consider a board token before a real house uses it. A guest holding their own key could sign a challenge away from the door; binding check-ins to the door (a door API key) would close that.
+
+## 2026-09-27 — Mainnet: factory deployed, live site switched to chain 1
+**Commit:** uncommitted
+
+- `script/Deploy.s.sol` broadcast to Ethereum mainnet with the `ai-city-sepolia` foundry keystore (`0xff7b…7E64`, funded 0.002 ETH). `ResidencyFactory` `0x0Abd146EB01d8b923C2162489E006b7b01C77A57`, tx `0x79d155d4db8c377ef03e6cad3a17cdedc8695f78f19b2281705dd2100a325313`, block 26064603, cost 0.000097 ETH. `usdc()` reads back real USDC. Contract code unchanged from the Sepolia build.
+- Droplet: `.env.local` backed up (`.env.local.sepolia-bak-*`), DB dumped (`backups/ai_city-20260926-222758-pre-mainnet.sql`, server UTC). Set `NEXT_PUBLIC_CHAIN_ID=1`, mainnet publicnode RPC for browser and server, the new factory, deploy block and USDC. Redeployed with `deploy-droplet.sh`; health 200, `/`, `/cities`, `/cities/zion`, `/docs/contracts`, `/api/cities` all 200, `/docs/contracts` shows the new factory.
+- Docs: README deploy section, `master-plan.md` §4, `ethglobal-submission.md` networks.
+- Verified before broadcast: `forge test` 30/30, fork test 1/1 against mainnet USDC, dry-run simulation.
+- **Gaps:** not source-verified (no `ETHERSCAN_API_KEY`; `forge verify-contract --verifier sourcify` errored). World ID on the droplet is still staging/unconfigured, so real users can't pass the human gate. The Zion and Singapore cities in the live DB point at Sepolia residencies, which don't exist on mainnet. No 1 USDC smoke test yet.
+
+## 2026-09-27 — Pi Zero signer card built fully offline; first door open on hardware
+**Commit:** uncommitted
+
+- Plain Pi Zero (no Wi-Fi). Its old card is Raspbian Jessie (Python 3.4), too old for `eth-account`, so it was kept untouched as a backup and a spare 16 GB card was flashed with Raspberry Pi OS Lite armhf (Trixie 2026-09-15, Python 3.13).
+- The Zero never touches a network, including during install. On the Mac, `pip download --platform linux_armv6l --python-version 3.13 --only-binary=:all:` from piwheels + PyPI fetched all 25 wheels (armv6 builds of `pydantic-core`, `ckzg`, `bitarray`, `cytoolz`, `regex`, `pycryptodome`), 11 MB. They go on the boot partition with the signer, and cloud-init `runcmd` runs `web/hardware/pi-zero/zero-offline-setup.sh`: `venv --without-pip`, pip run from its own wheel with `--no-index`, the service installed, `g_serial` via `/etc/modules-load.d`, and the key created offline. Only the address is written back to `/boot/firmware/zero-address.txt`. `config.txt` gets `dtoverlay=dwc2,dr_mode=peripheral`, and `cmdline.txt` gets `ds=nocloud;i=…`.
+- Verified: the setup script was run in a `linux/arm/v7` Debian Trixie container (wheel tags relabelled for the test), then for real on the Zero. `zero-setup.log` shows all packages installed with no errors. Zero address `0x2C0a1124c177f6c7E2084b5e8B7b47d98c44f798`. Plugged into the Pi 4, it enumerated as `Gadget_Serial` → `/dev/ttyACM0`, and `aicity-door` logged `OPEN 0x2C0a…f798: enrolled as this door's key`, then `locked` 9 s later.
+- **Gotchas:** macOS blocks `dd` to `/dev/rdiskN` from this agent's process even as root (TCC), so the flash ran from Terminal.app (`~/Downloads/pi-zero/flash.sh`). The first micro-USB cable was power-only: the Zero booted and finished setup but never enumerated. The Pi 4 reported `throttled=0x50000` (under-voltage has occurred since boot) on the power bank.
+- Follow-ups: fold the no-Wi-Fi offline path into `docs/pi-zero-offline-signer-setup.md`; fund the Zero address on Sepolia; a real Sepolia residency for the `staked`/`active` door rules.
 
 ## 2026-09-27 — Agent access: API keys, MCP server, transaction prep; docs formatting
 **Commit:** `e15eb42`, deployed to https://aicity.cyou (Sepolia) the same day
@@ -42,6 +86,24 @@ This is the internal log. The public build journal at `/devlog` (`web/app/devlog
 - Verified against the local dev server: SIWE sign-in 200; `/api/world/rp-context` 200 with a signed context for the RP (5 min TTL); a fabricated proof reaches World and is rejected `all_verifications_failed` (was `environment_not_allowed` before the token); gated `POST /api/cities` while unverified 403. `tsc --noEmit` clean; eslint clean on the changed file (the 25 `pnpm lint` errors are in other files).
 - **Not yet done:** no real simulator or World App proof has completed. e2e wasn't rerun cleanly: `.env.local` points at the Sepolia factory, so contract steps fail on anvil; the sign-in and verification checks passed. The droplet still has no World config.
 
+## 2026-09-27 — Zion and Singapore D/ACC Hardware City copied to the live instance
+**Commit:** none (data only)
+
+- Copied two cities from the local DB to production (https://aicity.cyou), leaving out the local `*-e2e*` test cities and their 15 API keys: `zion` (residency `0x7fb7…4588`, "Zion Hardware Buliders") and `singapore-d-acc-hardware-city` (residency `0x2488…0100`, "D/ACC Hardware Hacker House"). Both residencies are real Sepolia deployments (blocks 11787326 / 11787439), so their onchain state reads live.
+- Rows: 2 users + profiles (founders; no nullifier), 2 cities, 2 core-team founders, 2 series, 2 proposals (`deployed`), 2 residencies, 2 pending applications. Inserted in one transaction with fresh ids; foreign keys were remapped by slug (prod city ids are now 2 and 3, proposal ids 4 and 5). Each residency's pinned metadata still says `proposalId` 1/2 (the local ids). It is only read at deploy time, and the hash is onchain, so it stays.
+- Backup before the import: `/root/ai-city/backups/ai_city-20260926-215137-pre-zion-singapore.sql` on the droplet (server time is UTC).
+- Verified: `/cities/zion`, `/cities/singapore-d-acc-hardware-city`, both `/r/…` and `/r/…/board` return 200, and `/api/cities` lists all three cities.
+
+## 2026-09-27 — Status board fits the Pi's 3.5" screen; QR to the city; sample city calendar
+**Commit:** `73db1ed`, `517d255`
+
+- `/r/[address]/board` no longer shows the site header or footer: `components/not-on-board.tsx` wraps them in `app/layout.tsx` and hides them on board routes, and the board container is `z-50`.
+- `board-client.tsx` was re-laid out for 480×320 (the Pi's `piscreen` at scale 1): smaller type and padding, deadline and dates share a row, the USDC tiles shrink, and activity moves into a one-line strip at the bottom. It still scales up with `md:` sizes on bigger screens.
+- The board shows a QR code (`qrcode.react`, rendered locally as SVG) and the spelled-out link to the city home page (`<origin>/cities/<slug>`, or the residency page when there's no city).
+- City calendar, **dummy data only**: `lib/city-calendar.ts` builds a sample week relative to today (there's no events table). `components/city-calendar.tsx` provides `CityCalendar` (on `/cities/[slug]`, grouped by day, marked "Sample events") and `BoardCalendar` (the next 3 events on the board).
+- Verified: `tsc --noEmit` clean; eslint clean on the changed files (`pnpm lint` still fails on 25 errors elsewhere, e.g. `knowledge-manager.tsx`). Headless Chrome screenshots: the board in an exact 480×320 frame shows everything with nothing cut off, and the city page renders the calendar. Deployed to https://aicity.cyou (`517d255`). On the real Pi the first deploy was clipped ~20 px on the right: Chromium won't make a window narrower than ~500 px, so the viewport was wider than the 480 px panel. `517d255` caps the board at `screen.width`×`screen.height`. A `grim` screenshot of the Pi after restarting the kiosk shows it fitting.
+- Follow-ups: a real `city_events` table + founder editing to replace the sample data.
+
 ## 2026-09-27 — Pi 4 seat-key door: Zero challenge signing, GPIO servo, keyboard-free SD card
 **Commit:** uncommitted
 
@@ -49,7 +111,7 @@ This is the internal log. The public build journal at `/devlog` (`web/app/devlog
 - `zero-tx-signer.py`: new `DOOR:<residency>:<challenge>` → `DOOR_SIG:<sig>` command. It signs a fixed EIP-191 message (`door_message()`, the same format as in `pi4-door.py`) after a strict regex check. The wallet that stakes through `cold-sign.py` is the same key that opens the door, and one daemon serves both.
 - The Pi 4 SD card (boot partition) is set up for no keyboard. cloud-init `user-data` installs `/opt/aicity-door` (a venv with `--system-site-packages`, `eth-account`) and enables the service. `door.env` and `board-url.txt` are edited from the Mac. `instance-id` was bumped to `aicity-board-2026-09-27-door` so cloud-init runs again. The screen stays `piscreen,drm,rotate=0` (landscape).
 - `docs/pi4-door-kiosk-setup.md`: how it fits together, the door rules, wiring, SSH checks.
-- `docs/pi4-door-kiosk-setup.md` Test 6: a servo-only bench test over SSH (PWM overlay check, stop the service, `close`/`open`/`close`, `test` sweep, 10 cycles, undervoltage check, restart), with a fault table. Linked from `docs/test-checklist.md` 11.7. Run on the Pi 4 on 2026-09-27: 6.1–6.6 pass on the software side (PWM pulse 0.5/1.5 ms, 10/10 cycles, `throttled=0x0`); the physical movement was checked by eye at the desk. `secondBrain.local` doesn't resolve from the Mac, so SSH goes by IP (`arp -a`). Sudo needs a password, but the `gpio` group can drive `pwm0` without it.
+- `docs/pi4-door-kiosk-setup.md` Test 6: a servo-only bench test over SSH (PWM overlay check, stop the service, `close`/`open`/`close`, `test` sweep, 10 cycles, undervoltage check, restart), with a fault table. Linked from `docs/test-checklist.md` 11.7. Run on the Pi 4 on 2026-09-27: 6.1–6.6 pass on the software side (PWM pulse 0.5/1.5 ms, 10/10 cycles, `throttled=0x0`); Konrad confirmed at the desk that the horn moved. `secondBrain.local` doesn't resolve from the Mac, so SSH goes by IP (`arp -a`). Sudo needs a password, but the `gpio` group can drive `pwm0` without it.
 - Verified on the Mac: the real `zero-tx-signer.py` and `pi4-door.py` talked over a pty pair. First key enrolled and opened, same key opened again, a different paired key was denied, a malformed `DOOR:` was refused (`ERR:BAD_DOOR_CHALLENGE`). A live Sepolia `eth_call` through `eth_call()` decoded mock USDC `totalSupply`. Publicnode returns 403 to urllib's default User-Agent, so the script now sends its own. **Not yet run on the Pi 4 or the Zero.**
 - **Known gaps:** the board's residency `0xcafac3dd…052c` has no Sepolia contract, so `staked`/`active` fail until a Sepolia residency exists. Door events aren't shown on the screen. The older untracked `pi4-door-orc.py`, `seat-key-door.service` and `zero-door-program*.py` are superseded (Arduino, wrong ports) and left untouched.
 

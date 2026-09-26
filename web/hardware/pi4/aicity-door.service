@@ -1,0 +1,15 @@
+[Unit]
+Description=AI City seat-key door (Pi Zero signer on USB, SG90 latch on GPIO 12)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Editable from the Mac: the boot partition is the FAT one the card reader mounts
+EnvironmentFile=/boot/firmware/door.env
+ExecStart=/opt/aicity-door/venv/bin/python /opt/aicity-door/pi4-door.py run
+Restart=always
+RestartSec=5
+# No User=: it runs as root to write the PWM sysfs files and open the Zero's serial port
+
+[Install]
+WantedBy=multi-user.target

@@ -27,9 +27,15 @@ export const POST = handle(async (req: Request) => {
   const rpId = process.env.WORLD_RP_ID;
   if (!rpId) fail(503, "World ID is not configured on this server");
 
+  // Staging (simulator) proofs are only accepted during a Developer Portal staging window, which
+  // issues a token that must ride along on every verify call. Production never sends it.
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  const stagingToken = process.env.WORLD_STAGING_VERIFICATION_TOKEN;
+  if (config.worldEnvironment === "staging" && stagingToken) headers["x-staging-verification-token"] = stagingToken;
+
   const res = await fetch(`https://developer.world.org/api/v4/verify/${rpId}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify(idkitResult),
   });
   const verdict = (await res.json().catch(() => ({}))) as { environment?: string; detail?: string; code?: string };

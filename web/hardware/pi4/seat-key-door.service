@@ -1,0 +1,16 @@
+[Unit]
+Description=Residency Seat Key Door Orchestrator
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 /home/pi/pi4-door-orc.py
+WorkingDirectory=/home/pi
+Environment=RESIDENCY_ADDRESS=0xYourContractAddress
+Environment=RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YourKey
+Environment=PAIRING_MESSAGE=your-pairing-message-here
+Restart=always
+RestartSec=10
+User=pi
+
+[Install]
+WantedBy=multi-user.target

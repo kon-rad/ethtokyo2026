@@ -135,6 +135,7 @@ Set `RESIDENCY_ADDRESS` to a Sepolia residency and `RPC_URL` to a Sepolia RPC.
 | 11.4 | Zero holding an approved-but-unpaid wallet | "Access denied — not seated" |
 | 11.5 | Active but before `startTime` | Denied. Date check, not just status |
 | 11.6 | Unplug the Zero | Door locks within one poll (5 s) |
+| 11.7 | Servo alone over SSH: `pi4-door.py close`, `open`, `close`, then 10 cycles ([Test 6](pi4-door-kiosk-setup.md#test-6-the-servo-opens-and-closes-over-ssh)) | Horn turns ~90° each way and goes quiet; `vcgencmd get_throttled` stays `0x0` |
 
 ## 12. Droplet smoke test (read-only)
 

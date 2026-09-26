@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""
+Pi Zero Offline Seat Key Door Program
+Runs over USB serial gadget mode. No Wi-Fi, no network.
+Reads seed from /boot/seat.seed.
+Stores pairing message and presents it at the door.
+Only signs: challenge + residencyAddress + "ACCESS"
+Never signs arbitrary data or transactions.
+
+Usage: runs at boot via /etc/rc.local.
+       Connects on /dev/ttyAMA0 when plugged into a Pi 4.
+"""
+import os, sys, time, json, hashlib
+from eth_account import Account
+from eth_account.messages import encode_defunct
+
+# ── Configuration ──────────────────────────────────────────
+SEED_FILE = "/boot/seat.seed"
+PAIRING_FILE = "/boot/pairing.msg"
+RESIDENCY_ADDRESS = "0x0000000000000000000000000000000000000000"  # ← REPLACE ME
+SERIAL_PORT = "/dev/ttyAMA0"
+BAUD = 115200
+# ──────────────────────────────────────────────────────────
+
+def load_key():
+    if not os.path.exists(SEED_FILE):
+        print(f"ERROR: no seed file at {SEED_FILE}", flush=True)
+        sys.exit(1)
+    with open(SEED_FILE) as f:
+        seed = f.read().strip()
+    Account.enable_unaudited_hdwallet_features()
+    return Account.from_mnemonic(seed)
+
+def load_pairing():
+    """Load the pairing message from storage."""
+    if not os.path.exists(PAIRING_FILE):
+        return None
+    with open(PAIRING_FILE) as f:
+        return f.read().strip()
+
+def sign_challenge(key, challenge_hex):
+    message = challenge_hex + RESIDENCY_ADDRESS.lower() + "ACCESS"
+    signed = key.sign_message(encode_defunct(text=message))
+    return signed.signature.hex()
+
+def main():
+    key = load_key()
+    addr = key.address
+    pairing_msg = load_pairing()
+    print(f"BOOT:{addr}", flush=True)
+
+    # Wait for serial device to appear (USB gadget mode)
+    import serial
+    while not os.path.exists(SERIAL_PORT):
+        time.sleep(1)
+
+    ser = serial.Serial(SERIAL_PORT, BAUD, timeout=30)
+    ser.write(f"READY:{addr}\n".encode())
+
+    while True:
+        try:
+            line = ser.readline().decode().strip()
+        except Exception:
+            time.sleep(1)
+            continue
+        if not line:
+            continue
+
+        if line.startswith("CHALLENGE:"):
+            challenge = line[10:]
+            try:
+                raw = bytes.fromhex(challenge)
+                if len(raw) != 32:
+                    ser.write(b"ERR:BAD_LENGTH\n")
+                    continue
+            except ValueError:
+                ser.write(b"ERR:NOT_HEX\n")
+                continue
+            sig = sign_challenge(key, challenge)
+            ser.write(f"SIGNATURE:{sig}\n".encode())
+
+        elif line == "PING":
+            ser.write(b"PONG\n")
+        elif line == "ADDR":
+            ser.write(f"ADDR:{addr}\n".encode())
+        elif line == "PAIRING":
+            if pairing_msg:
+                ser.write(f"PAIRING:{pairing_msg}\n".encode())
+            else:
+                ser.write(b"PAIRING:NO_PAIRING\n")
+        elif line.startswith("STORE_PAIRING:"):
+            # Store a new pairing message
+            pairing_msg = line[14:]  # Remove "STORE_PAIRING:"
+            with open(PAIRING_FILE, "w") as f:
+                f.write(pairing_msg)
+            ser.write(b"STORED\n")
+        else:
+            ser.write(b"ERR:UNKNOWN\n")
+
+if __name__ == "__main__":
+    main()
