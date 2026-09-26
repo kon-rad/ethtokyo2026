@@ -86,6 +86,18 @@ Steps as run (or to repeat):
 4. Vercel: root `web/`, env vars from `web/.env.example` (`NEXT_PUBLIC_CHAIN_ID=1`, `NEXT_PUBLIC_WORLD_ENV=production`, no `ALLOW_DEV_VERIFY`).
 5. Smoke test with a 1 USDC city before announcing.
 
+## Demos (screen recordings)
+
+| File | What it shows |
+|------|---------------|
+| `screen-recordings/homepage-launch-popupcity.mov` | Homepage → launch a pop-up city flow |
+| `screen-recordings/launch-new-residency-pt1.mov` | Launching a new residency (part 1 — filling in details) |
+| `screen-recordings/launch-new-residency-form.mov` | The residency creation form |
+| `screen-recordings/launch-new-residency-submit.mov` | Submitting the residency form |
+| `screen-recordings/deploy-residency-sign.mov` | Deploying the Residency contract and signing the transaction |
+| `screen-recordings/apply-to-residency-and-updateprofile.mov` | Applying to a residency + updating your profile |
+| `screen-recordings/hacker-application.mov` | Hacker application flow |
+
 ## Pages
 
 | Path | Description |
