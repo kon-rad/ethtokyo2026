@@ -1,66 +1,108 @@
 ---
 name: ai-city-knowledge
-description: Access the knowledge base behind each AI City city and residency - list its files, ask its concierge questions grounded in them, and (as core team or host) add or update files.
+description: Read, search and ask about the knowledge base behind each AI City city and residency - list its files, read any file's full text (including text extracted from uploaded PDFs and Word docs), full-text search across a city and its residencies, ask the concierge; and, as the city's founder or residency's host, add, upload and delete files.
 ---
 
 # AI City: city and residency knowledge bases
 
-Part of the [AI City skill](../skill.md).
+Part of the [AI City skill](../skill.md). Reading, searching and asking are public. Writing is only for the **city's founder** or the **residency's host**.
 
-Every city and residency can have a knowledge base: markdown files (city profile, local guide, house rules, logistics) that ground an AI **concierge**. Scopes:
+Every city and residency has a knowledge base: files such as a city profile, a local guide, house rules, arrival logistics, or a PDF handbook. Uploaded PDFs and Word files have their text extracted, so everything is readable as text and searchable.
 
-| Scope | Files the concierge reads | Base path |
+| Scope | Base path | Its concierge reads |
 |---|---|---|
-| City | `knowledge/cities/{slug}/*.md` + the shared Argo journal | `/api/concierge/city/{slug}` |
-| Residency | `knowledge/residencies/{address}/*.md` + the shared Argo journal | `/api/concierge/residency/{address}` |
+| City | `/api/concierge/city/{slug}` | The city's listing and files + shared platform notes |
+| Residency | `/api/concierge/residency/{address}` | The residency's listing (dates, beds, prices) and files + **its city's files** + shared platform notes |
 
-Use the city slug from `GET /api/cities` and the residency address exactly as the API returns it.
+`{slug}` comes from `GET /api/cities`, `{address}` from `GET /api/residencies`. Hidden residencies return 404.
 
 ## List files
 
 ```
 GET /api/concierge/city/{slug}/knowledge
 GET /api/concierge/residency/{address}/knowledge
-→ { "files": ["city-profile.md", "local-guide.md"] }
+→ {
+    "scope": { "kind": "residency", "key": "0x…", "name": "Builders' House Goa #1" },
+    "canEdit": false,
+    "files": [
+      { "filename": "house-rules.pdf", "mime": "application/pdf", "chars": 4210, "hasOriginal": true, "updatedAt": "…" },
+      { "filename": "local-guide.md", "mime": "text/markdown", "chars": 2380, "hasOriginal": false, "updatedAt": "…" }
+    ]
+  }
 ```
 
-An empty list means nobody has written a knowledge base for it yet. The concierge will say it doesn't know.
+`canEdit` is true when the signed-in session is the founder or host.
+
+## Read a file
+
+```
+GET …/knowledge?file=house-rules.pdf
+→ { "file": { "filename", "mime", "content": "full text…", "chars", "hasOriginal", "updatedAt" } }
+
+GET …/knowledge?file=house-rules.pdf&original=1   → the uploaded PDF/DOCX bytes
+```
+
+`content` is the markdown as written or, for an upload, its extracted text (PDF pages separated by blank lines; layout and images are lost). When a detail matters (a price, a date, an address), quote the file rather than paraphrasing it.
+
+## Search
+
+```
+GET /api/knowledge/search?q=<words>&residency=<address>   // that residency + its city
+GET /api/knowledge/search?q=<words>&city=<slug>           // the city + all its residencies
+GET /api/knowledge/search?q=<words>                        // every public knowledge base
+                                     &limit=10              // 1–30, default 10
+→ { "hits": [
+    { "scope": "residency", "key": "0x…", "filename": "house-rules.pdf", "chunk": 3,
+      "snippet": "The **scooter** rental shop is Anjuna Wheels…",
+      "text": "the full passage, up to ~1500 characters",
+      "rank": 0.09 } ] }
+```
+
+- Full-text search in English with stemming (`scooters` matches `scooter`). Every word counts, and passages sharing more words with the query rank higher, so a plain question works: `q=where can I rent a scooter`.
+- `text` is the whole passage. It's usually enough to answer without fetching the file. `chunk` tells you where in the file it sits.
+- No hits: try synonyms (`bike`, `motorbike`), then read the files directly.
 
 ## Ask the concierge
 
-This is how you read a knowledge base. Ask specific questions and ask several; each call is independent, with no memory of the previous one.
+For a direct answer in natural language:
 
 ```
 POST /api/concierge/city/{slug}
 POST /api/concierge/residency/{address}
-{ "message": "What's the nearest coworking space, and is the wifi good enough for video calls?" }
-
-→ {
-    "response": "2–4 sentence answer grounded in the files",
-    "suggestions": ["Follow-up question", "…"],
-    "knowledgeSources": ["city-profile.md", "local-guide.md"]
-  }
+{ "message": "Is the wifi good enough for video calls, and where do I rent a scooter?" }
+→ { "response": "2–4 sentences", "suggestions": ["…"], "knowledgeSources": ["residency · house-rules.pdf", "city · city-profile.md"] }
 ```
 
-- `knowledgeSources` lists the files that were in context, not the ones the answer came from.
-- Put everything the concierge needs in `message`: dates, what your human cares about, the constraint. It sees nothing else.
-- For a full picture (e.g. "brief me on this city before I apply"), ask 4–6 targeted questions (housing, food, transport, visa, community, costs) and merge the answers yourself.
-- If `response` starts with "The concierge isn't configured" or "hit a snag", the server has no model key or the model call failed. Tell your human and fall back to the city's `description` and `mission`.
-- The concierge can be wrong. For anything with money, health or legal stakes, say where the answer came from and suggest your human confirms with the organizers.
+- Each call is independent, with no memory of the previous one. Put everything it needs into `message`.
+- For large knowledge bases the concierge sees only the passages that best match your message, so ask one topic per call.
+- A response starting "The concierge isn't configured" or "hit a snag" means the server's model is down. Use search and read the files instead.
+- **The concierge can be wrong.** For money, health, legal or safety questions, check with search or by reading the file and quote the source. Suggest confirming with the organizers.
 
-## Add or update a file
+**Which to use:** search when you need facts to act on, the concierge when your human wants a quick conversational answer, and reading the file when you need the whole document.
 
-Only on your human's instruction, and only for a city whose core team they're on or a residency they host.
+## Add, upload, delete (founder or host only)
+
+Only on your human's instruction. Anyone else gets `403 Only the city's founder can edit its knowledge base` / `403 Only the host can edit this residency's knowledge base`. Core team members who aren't the founder can read but not edit.
+
+**Write a text file** (`.md`, `.txt`, `.csv`, `.json`). The same filename overwrites.
 
 ```
-PUT /api/concierge/city/{slug}/knowledge
-PUT /api/concierge/residency/{address}/knowledge
+PUT …/knowledge
 { "filename": "house-rules.md", "content": "# House rules\n\n…" }
 → { "ok": true, "filename": "house-rules.md" }
 ```
 
-- `filename` must end in `.md`. The same name overwrites.
-- Write facts, not marketing: addresses, prices with currency, dates, contacts, rules. The concierge answers in 2–4 sentences, so short, well-headed sections work best.
-- Good starting files: `city-profile.md` (what, when, who, mission), `local-guide.md` (transport, food, SIM, money, safety), `logistics.md` (arrival, check-in, what to bring), `faq.md`.
+**Upload a file** (`.pdf`, `.docx`, or any of the text types; max 4 MB). Its text is extracted and indexed straight away.
 
-Delete: `DELETE` on the same path with `{ "filename": "old.md" }`.
+```
+POST …/knowledge      multipart/form-data: file=<the file>, filename=<optional override>
+→ { "ok": true, "filename": "handbook.pdf", "chars": 18234 }
+```
+
+Scanned PDFs (images of text) fail with `That file has no extractable text`: they need OCR first. To edit an uploaded PDF's text, write a corrected `.md` and delete the PDF.
+
+**Delete:** `DELETE …/knowledge` with `{ "filename": "old.md" }`.
+
+Filenames: letters, numbers, `.` `-` `_`, max 100 characters, no folders.
+
+**Writing good knowledge.** Write facts, not marketing: addresses, prices with the currency, dates, contacts, rules. Use short sections with clear headings, since search and the concierge work passage by passage. Good starting files: `city-profile.md` (what, when, who, mission), `local-guide.md` (transport, food, SIM, money, safety), `logistics.md` (arrival, check-in, what to bring), `faq.md`. A residency doesn't need to repeat its city's local guide: its concierge already reads the city's files.

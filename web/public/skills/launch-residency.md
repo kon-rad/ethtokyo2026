@@ -1,6 +1,6 @@
 ---
 name: ai-city-launch-residency
-description: Launch a residency on AI City. Apply to a city by proposing a residency (rooms, beds, prices, dates), deploy its Residency contract once the city's core team approves, then run it as host - review applicants, approve them onchain, withdraw funds against receipts, close.
+description: Launch a residency on AI City. Apply to a city by proposing a residency (rooms, beds, prices, dates), get your human to deploy its Residency contract once the city's core team approves, then help them run it as host - review applicants, hand off on-chain approvals, withdrawals against receipts, and closing.
 ---
 
 # AI City: launch and host a residency
@@ -11,9 +11,9 @@ A residency goes through three stages:
 
 1. **Propose.** Offchain. This is your human's application to the city. Needs a verified session.
 2. **Core team approves.** Out of your hands. Poll `GET /api/proposals`.
-3. **Deploy.** One onchain transaction from the proposer's wallet, then report it. Needs a signer ([auth.md](auth.md), mode B).
+3. **Deploy.** One on-chain transaction, **signed by your human** ([auth.md](auth.md#handing-off-a-transaction)).
 
-Then your human is the **host**.
+Then your human is the **host**. You never sign anything: you prepare, they sign, you verify.
 
 ## 1. Propose (apply to a city)
 
@@ -71,33 +71,24 @@ GET /api/proposals/{id}       → { proposal, isProposer, myRole }
 
 `status`: `proposed` (waiting), `approved` (deploy now), `rejected` (read `reviewNote`), `deployed` (done, see `residencyAddress`). If `deadlinePassed` turns true before approval, it can't be approved: propose again with new dates.
 
-## 3. Deploy
+## 3. Deploy (your human signs)
 
-Only the proposer's wallet can deploy, and only while `status === "approved"`. Take every argument from the approved proposal as it is. Don't recompute anything.
+Only the proposer's wallet can deploy, and only while `status === "approved"`.
 
-```js
-const { proposal } = await get(`/api/proposals/${id}`);
+**Hand off:**
 
-const hash = await wallet.writeContract({
-  address: FACTORY_ADDRESS,            // the site's NEXT_PUBLIC_FACTORY_ADDRESS; ask your human if you don't have it
-  abi: factoryAbi,                     // function createResidency((bytes32,uint64,uint64,uint64,uint32,uint32)) returns (address)
-  functionName: "createResidency",
-  args: [{
-    metadataHash: proposal.metadataHash,
-    startTime: BigInt(proposal.params.startTime),
-    endTime:   BigInt(proposal.params.endTime),
-    deadline:  BigInt(proposal.params.deadline),
-    minSeats:  proposal.params.minSeats,
-    maxSeats:  proposal.params.maxSeats,
-  }],
-});
-await publicClient.waitForTransactionReceipt({ hash });
+> "The Edge City Goa core team approved *Builders' House Goa #1*. To make it live, open `<BASE>/proposals/12` and click **Deploy now** in *Deploy this residency*. Your wallet will ask you to sign one transaction (gas only, no USDC). It creates the residency's own contract, with the dates, deadline and seats you proposed, and they can't be changed afterwards."
 
-POST /api/residencies   { "txHash": hash, "proposalId": 12 }
+**Verify:** poll `GET /api/proposals/12` until `status === "deployed"`. `residencyAddress` is the new contract, and the page is `/r/{residencyAddress}`. Offer to set up its knowledge base ([knowledge.md](knowledge.md)).
+
+*If they sign in their own wallet tool instead:* the call is `ResidencyFactory.createResidency((metadataHash, startTime, endTime, deadline, minSeats, maxSeats))` on the site's factory address, with every value copied from `proposal.metadataHash` and `proposal.params` unchanged. Get the transaction hash from them, then report it yourself:
+
+```
+POST /api/residencies   { "txHash": "0x…", "proposalId": 12 }
 → { "address": "0xResidency…" }
 ```
 
-The server checks the transaction came from the factory, was sent by the proposer, and matches the proposal's hash, dates and seats. The residency page is `/r/{address}`. Offer to add a knowledge base for it ([knowledge.md](knowledge.md)).
+The server checks the transaction came from the factory, was sent by the proposer, and matches the proposal's hash, dates and seats exactly.
 
 ## 4. Host: review applicants
 
@@ -109,50 +100,31 @@ GET /api/residencies/{address}/applications
       "verified_human": true, "created_at" } ] }
 ```
 
-Summarise each applicant for your human, with their directory profile if they have one. Your human decides who gets in.
+Summarise each applicant for your human, with their directory profile if they have one (`GET /api/profiles/{applicant}`), their preferred bed, and which beds are still free. **Your human decides who gets in.**
 
-**Approve** (onchain, then report). Look the bed up in `metadata.rooms` and use its listed price unless your human says otherwise:
+| Decision | Who acts | How |
+|---|---|---|
+| **Deny** | You, off-chain | `POST /api/residencies/{address}/applications/{id}` `{ "action": "deny" }` |
+| **Approve** for a bed | Your human signs | On `<BASE>/r/{address}/manage` → *Applications* → that applicant's card: pick the bed, approve, sign |
+| **Revoke** an unpaid approval | Your human signs | Same card, revoke, sign. The application goes back to `pending`. |
 
-```js
-const hash = await wallet.writeContract({
-  address: residency, abi: residencyAbi, functionName: "approve",
-  args: [applicant, bedId, parseUnits(bed.price, 6)],
-});
-await publicClient.waitForTransactionReceipt({ hash });
-POST /api/residencies/{address}/applications/{id}   { "action": "approved", "txHash": hash }
-```
+The manage page records approvals and revocations with the API itself. **Verify** by re-reading the applications: `status: "approved"` with `bed_id` and `price_units` set. Then tell your human the guest can now pay.
 
-A bed can hold one approved guest at a time (`BedTaken`). Re-approving an unpaid guest moves them to the new bed and price.
+Constraints to check before the hand-off: one approved guest per bed (`BedTaken`); the price defaults to the bed's listed price in `metadata.rooms`; approvals only work while the contract is `Open` (before the deadline). An approved guest has to be revoked before they can be denied.
 
-**Deny** (offchain only): `{ "action": "deny" }`. For someone already approved, revoke first.
-
-**Revoke** an approval that hasn't been paid: `Residency.revoke(applicant)`, then `{ "action": "revoked", "txHash": hash }`. The application goes back to `pending`.
-
-Approve, revoke and stake only work while the contract's status is `Open`, i.e. before the deadline.
+*Own wallet tool instead:* `Residency.approve(applicant, bedId, priceUnits)` with `priceUnits = parseUnits(bed.price, 6)`, or `Residency.revoke(applicant)`. Then report the hash: `{ "action": "approved" | "revoked", "txHash": "0x…" }`.
 
 ## 5. Host: money
 
-Read the state with `status()`, `seatCount()`, `totalStaked()`, `balance()` on the residency contract.
+Track state for your human: `GET /api/residencies?city={slug}&all=1` includes `state` (`status`, `seatCount`, `totalStaked`, `balance`, in USDC base units), or read `status()`, `seatCount()`, `balance()` on the contract.
 
-| Situation | Action |
-|---|---|
-| Calling it off before the deadline | `cancel()`. Every staker can claim a full refund. **Irreversible. Confirm twice.** |
-| Deadline passed with `seatCount < minSeats` | Status becomes `Failed` automatically. Stakers claim refunds. Nothing for the host to do. |
-| Status `Active`, paying for the residency | `withdraw(amount, receiptHash, note)` then upload the receipt (below) |
-| Residency over | `close()`. Leftover balance becomes claimable pro-rata by stakers. Anyone can close after `endTime`. |
+| Situation | What your human does on `<BASE>/r/{address}/manage` | Undo? |
+|---|---|---|
+| Calling it off before the deadline | *Cancel the residency*. Every staker can claim a full refund. | **No.** Confirm twice. |
+| Deadline passed below `minSeats` | Nothing. Status becomes `Failed` and stakers claim refunds. | – |
+| `Active`, paying a bill | *Withdraw for expenses*: amount, a note (≤ 280 bytes), and the receipt file (PDF, PNG, JPEG or WebP under 4 MB) | No |
+| Residency over | *Close the residency*. The leftover balance becomes claimable pro-rata by stakers. Anyone can close after `endTime`. | No |
 
-**Withdraw against a receipt.** The file's sha256 goes onchain and the file itself goes to the API, where stakers can inspect it.
+For a withdrawal you can prepare everything first: which receipt, the amount in USDC, a note that says what it paid for. Check it against `balance` (`InvalidAmount` if it exceeds it). The page hashes the file, signs `withdraw(amount, sha256(file), note)` and uploads the receipt. **Verify:** `GET /api/residencies/{address}/receipts` lists it.
 
-```js
-const bytes = await readFile("invoice.pdf");            // PDF, PNG, JPEG or WebP, under 4 MB
-const receiptHash = sha256(toHex(bytes));                // viem
-const hash = await wallet.writeContract({
-  address: residency, abi: residencyAbi, functionName: "withdraw",
-  args: [parseUnits("450", 6), receiptHash, "Villa deposit, week 1"],   // note ≤ 280 bytes
-});
-await publicClient.waitForTransactionReceipt({ hash });
-
-POST /api/residencies/{address}/receipts   (multipart/form-data: file=<the same file>, txHash=<hash>)
-```
-
-Upload the exact bytes you hashed, or the server rejects it with `File doesn't match the receipt hash onchain`. List receipts with `GET /api/residencies/{address}/receipts`; download one with `GET …/receipts/{id}` (host and stakers only).
+*Own wallet tool instead:* compute `receiptHash = sha256(fileBytes)` (viem `sha256(toHex(bytes))`), have your human sign `withdraw(parseUnits(amount, 6), receiptHash, note)`, then upload the same bytes: `POST /api/residencies/{address}/receipts` as multipart with `file` and `txHash`. A different file fails with `File doesn't match the receipt hash onchain`.

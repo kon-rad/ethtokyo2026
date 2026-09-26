@@ -5,13 +5,16 @@ import { useState } from "react";
 type Props = {
   filename: string;
   initialContent: string;
+  /** View only: extracted text of an uploaded file, or someone else's knowledge base. */
+  readOnly?: boolean;
+  originalUrl?: string | null;
   onSave: (content: string) => Promise<void>;
   onCancel: () => void;
 };
 
-export function KnowledgeEditor({ filename, initialContent, onSave, onCancel }: Props) {
+export function KnowledgeEditor({ filename, initialContent, readOnly, originalUrl, onSave, onCancel }: Props) {
   const [content, setContent] = useState(initialContent);
-  const [preview, setPreview] = useState(false);
+  const [preview, setPreview] = useState(!!readOnly);
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
@@ -28,18 +31,31 @@ export function KnowledgeEditor({ filename, initialContent, onSave, onCancel }: 
       <div className="flex items-center justify-between">
         <h3 className="font-semibold">{filename}</h3>
         <div className="flex gap-2">
+          {originalUrl && (
+            <a
+              href={originalUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full border border-line px-3 py-1 text-xs font-medium transition hover:bg-gray-50"
+            >
+              Original
+            </a>
+          )}
+          {!readOnly && (
           <button
             onClick={() => setPreview(!preview)}
             className="rounded-full border border-line px-3 py-1 text-xs font-medium transition hover:bg-gray-50"
           >
             {preview ? "Edit" : "Preview"}
           </button>
+          )}
           <button
             onClick={onCancel}
             className="rounded-full border border-line px-3 py-1 text-xs font-medium text-muted transition hover:bg-gray-50"
           >
-            Cancel
+            {readOnly ? "Close" : "Cancel"}
           </button>
+          {!readOnly && (
           <button
             onClick={handleSave}
             disabled={saving}
@@ -47,6 +63,7 @@ export function KnowledgeEditor({ filename, initialContent, onSave, onCancel }: 
           >
             {saving ? "Saving..." : "Save"}
           </button>
+          )}
         </div>
       </div>
 

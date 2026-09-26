@@ -1,15 +1,15 @@
 ---
 name: ai-city-apply-residency
-description: Apply to an AI City residency for your human, track the application, pay for the approved bed by staking USDC into the residency contract, and claim refunds or leftovers afterwards.
+description: Apply to an AI City residency for your human, track the application, then hand off paying for the approved bed (a USDC stake your human signs) and claiming refunds or leftovers afterwards.
 ---
 
 # AI City: apply to a residency
 
-Part of the [AI City skill](../skill.md). Applying needs a **verified** session. Paying and claiming need a signer ([auth.md](auth.md), mode B).
+Part of the [AI City skill](../skill.md). Applying needs a **verified** session. Paying and claiming are transactions **your human signs** ([auth.md](auth.md#handing-off-a-transaction)). You prepare them and check the result.
 
 1. Apply (offchain).
 2. Host approves your human for a bed (onchain, their side).
-3. Stake the bed's price in USDC before the deadline (onchain, your side).
+3. Your human stakes the bed's price in USDC before the deadline (on-chain, they sign).
 4. After the deadline, the residency is `Active` (it's on) or `Failed` (claim a refund).
 
 ## Find one
@@ -62,45 +62,40 @@ GET /api/residencies/{address}/apply
 
 `price_units` is what your human owes, in USDC base units (`200000000` = 200 USDC). Tell them the moment status turns `approved`: the bed is held only until someone stakes, and the deadline is fixed.
 
-## Pay: stake USDC
+## Pay: your human stakes USDC
 
-Confirm with your human first: residency name, bed, amount in USDC, deadline, and that the contract is unaudited. You need the site's USDC address (mainnet `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`) and some ETH for gas.
+**Prepare.** Confirm the numbers from the chain, not from memory. On the residency contract, `getMember(humanAddress)` should return `{ approved: true, staked: false, bedId, price }`, where `price` is in USDC base units. Also check:
 
-```js
-// Check the approval onchain. It's the source of truth.
-const m = await publicClient.readContract({ address: residency, abi: residencyAbi, functionName: "getMember", args: [me] });
-// m = { approved: true, staked: false, claimed: false, bedId: 3, price: 200000000n }
+- It's before `deadline` and `state.status === "Open"`.
+- `seatCount < maxSeats`.
+- Your human's wallet holds at least `price` USDC plus a little ETH for gas.
 
-// 1. Allow the residency to pull exactly the price
-await wallet.writeContract({ address: USDC, abi: erc20Abi, functionName: "approve", args: [residency, m.price] });
-// 2. Stake
-const hash = await wallet.writeContract({ address: residency, abi: residencyAbi, functionName: "stake" });
-await publicClient.waitForTransactionReceipt({ hash });
-```
+**Hand off:**
 
-Nothing needs reporting to the API: the site reads stakes from the chain. Afterwards, `getMember(me).staked === true`.
+> "You're approved for the Queen bed at Builders' House Goa #1: 200 USDC, due before 2026-10-15. Open `<BASE>/r/0x…`. Click **Step 1 of 2 · Allow 200 USDC** and sign, then **Step 2 of 2 · Pay 200 USDC** and sign. If fewer than 2 people pay by the deadline, you get all of it back. Heads up: the contracts are unaudited."
+
+**Verify:** `getMember(humanAddress).staked === true`, or your human's profile (`GET /api/profiles/{address}`) lists the residency under `participation.residencies` with `role: "member"`. The page shows "You're in ✓".
+
+*Own wallet tool instead:* two transactions. First `USDC.approve(residencyAddress, price)` on the site's USDC contract (mainnet `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`), then `Residency.stake(price)`, passing the approved price from `getMember(wallet).price` (it reverts with `PriceChanged` if the host changed it). Nothing needs reporting to the API: stakes are read from the chain.
 
 | Revert | Meaning |
 |---|---|
-| `NotApproved` | The host hasn't approved this wallet (or revoked it) |
+| `NotApproved` | The host hasn't approved this wallet, or revoked it |
 | `AlreadyStaked` | Already paid |
 | `ResidencyFull` | `maxSeats` reached |
 | `WrongStatus` | Past the deadline, or cancelled |
-| ERC-20 allowance / balance error | Not enough USDC, or step 1 was skipped |
+| ERC-20 allowance / balance error | Not enough USDC, or the approval step was skipped |
 
 ## After the deadline
 
-Read `status()` on the residency contract (`0` Open, `1` Active, `2` Failed, `3` Closed) and `claimable(me)`.
+Read `status()` on the residency contract (`0` Open, `1` Active, `2` Failed, `3` Closed) and `claimable(humanAddress)` (USDC base units).
 
 | Status | What it means for your human |
 |---|---|
-| `Active` | Minimum reached, it's happening. Receipts for the host's spending: `GET /api/residencies/{address}/receipts` |
-| `Failed` | Minimum not reached, or the host cancelled. Full refund: call `claim()` |
-| `Closed` | Over. Any unspent balance is split pro-rata by stake: call `claim()` if `claimable(me) > 0` |
+| `Active` | Minimum reached, it's happening. Receipts for the host's spending: `GET /api/residencies/{address}/receipts` (stakers can read them) |
+| `Failed` | Minimum not reached, or the host cancelled. Full refund waiting. |
+| `Closed` | Over. Unspent balance split pro-rata by stake; claim within 180 days, after which the host can sweep it. |
 
-```js
-const amount = await publicClient.readContract({ address: residency, abi: residencyAbi, functionName: "claimable", args: [me] });
-if (amount > 0n) await wallet.writeContract({ address: residency, abi: residencyAbi, functionName: "claim" });
-```
+When `claimable > 0`, **hand off**: "You have 200 USDC to claim from Builders' House Goa #1. Open `<BASE>/r/0x…` and click **Claim 200 USDC**, then sign once." (*Own wallet tool:* `Residency.claim()`.) **Verify:** `claimable` is now `0`. Each member can claim once.
 
-`claim()` works once per member. Check `claimable` for residencies your human has staked in (`GET /api/profiles/{address}` → `participation.residencies`) and tell them about any money waiting.
+Check `claimable` for every residency your human has staked in (`GET /api/profiles/{address}` → `participation.residencies`) and tell them about any money waiting.

@@ -16,12 +16,14 @@ Luma for pop-up cities. Anyone can launch a city (a place and a time window, off
 | **Residency** | Deploy | Proposer calls `POST /api/residencies` after the tx | `ResidencyFactory.createResidency` deploys a `Residency` |
 | | Apply | Name, bio, links, preferred bed → `POST /api/residencies/[addr]/apply` | — |
 | | Approve | Host records after the tx is mined | `approve(member, bedId, price)` |
-| | Stake | — | `stake()` (USDC approve first) |
+| | Stake | — | `stake(price)` (USDC approve first) |
 | | Deadline | — | `status()` → Active (≥ min seats) or Failed (refunds) |
 | | Withdraw | Receipt file stored, sha256 checked against the event | `withdraw(amount, receiptHash, note)` |
 | | Close / claim | — | `close()` → pro-rata leftovers; `claim()` |
 
-**Agents:** people's agents can do everything the UI does. Point them at `/skill.md` ([`web/public/skill.md`](web/public/skill.md)), which indexes per-task skills in `web/public/skills/`: auth, directory, launch-city, launch-residency, apply-residency, knowledge.
+**Agents:** people's agents can do everything the UI does, and the human signs every wallet action. Point them at `/skill.md` ([`web/public/skill.md`](web/public/skill.md)), which indexes per-task skills in `web/public/skills/`: auth, directory, launch-city, launch-residency, apply-residency, knowledge.
+
+**Knowledge bases:** each city and residency has one, stored in Postgres (`knowledge_files`, chunked into `knowledge_chunks` for full-text search). The city founder or residency host writes markdown or uploads PDF/DOCX, whose text is extracted. A residency's concierge also reads its city's files. `web/knowledge/` holds seed files loaded by `scripts/import-knowledge.mjs`.
 
 Architecture and design: [`docs/architecture-plan.md`](docs/architecture-plan.md). Security notes: [`docs/SECURITY.md`](docs/SECURITY.md).
 
@@ -55,6 +57,7 @@ pnpm dev --port 3100
 
 # seed demo data and run the full e2e test
 node scripts/seed-local.mjs
+node scripts/import-knowledge.mjs   # knowledge/ seed files → Postgres
 node scripts/e2e-local.mjs
 ```
 
@@ -64,7 +67,7 @@ After changing a contract: `forge build && node web/scripts/gen-abi.mjs`.
 
 1. World Developer Portal: create the app, note `app_id`, `rp_id` and the signing key; create action `ai-city-verify-human`.
 2. `cd contracts && forge script script/Deploy.s.sol --tc Deploy --rpc-url mainnet --ledger --broadcast --verify` (hardware wallet; `ETHERSCAN_API_KEY` set). Note the factory address and block.
-3. Neon Postgres → `node web/scripts/migrate.mjs`.
+3. Neon Postgres → `node web/scripts/migrate.mjs`, then `node web/scripts/import-knowledge.mjs`.
 4. Vercel: root `web/`, env vars from `web/.env.example` (`NEXT_PUBLIC_CHAIN_ID=1`, `NEXT_PUBLIC_WORLD_ENV=production`, no `ALLOW_DEV_VERIFY`).
 5. Smoke test with a 1 USDC city before announcing.
 

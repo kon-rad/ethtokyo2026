@@ -148,3 +148,65 @@ CREATE TABLE IF NOT EXISTS receipts (
   data          BYTEA NOT NULL,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Knowledge bases behind each city's and residency's concierge. `content` is the file's text:
+-- markdown as written, or text extracted from an uploaded PDF/DOCX (the original kept in
+-- `source`). A city's files are edited by its founder, a residency's by its host.
+-- `shared` holds platform-wide files (scope_key = folder name, e.g. 'argo-journal').
+CREATE TABLE IF NOT EXISTS knowledge_files (
+  id          BIGSERIAL PRIMARY KEY,
+  scope       TEXT NOT NULL CHECK (scope IN ('city', 'residency', 'shared')),
+  scope_key   TEXT NOT NULL,                         -- city slug, lowercase residency address, or folder
+  filename    TEXT NOT NULL,
+  mime        TEXT NOT NULL,                         -- of the original file
+  content     TEXT NOT NULL,
+  source      BYTEA,                                 -- original upload when it isn't plain text
+  updated_by  TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (scope, scope_key, filename)
+);
+
+-- Search and retrieval work on chunks: paragraphs packed up to ~1500 characters.
+CREATE TABLE IF NOT EXISTS knowledge_chunks (
+  file_id  BIGINT NOT NULL REFERENCES knowledge_files(id) ON DELETE CASCADE,
+  idx      INT NOT NULL,
+  content  TEXT NOT NULL,
+  search   TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
+  PRIMARY KEY (file_id, idx)
+);
+CREATE INDEX IF NOT EXISTS knowledge_chunks_search_idx ON knowledge_chunks USING gin (search);
+
+-- Rebuilds a file's chunks whenever its text changes, so they can never drift from `content`.
+CREATE OR REPLACE FUNCTION knowledge_rechunk() RETURNS trigger AS $$
+DECLARE
+  max_len CONSTANT INT := 1500;
+  para TEXT;
+  buf TEXT := '';
+  n INT := 0;
+BEGIN
+  DELETE FROM knowledge_chunks WHERE file_id = NEW.id;
+  FOR para IN SELECT btrim(p) FROM regexp_split_to_table(NEW.content, E'\\n\\s*\\n') AS p LOOP
+    CONTINUE WHEN para = '';
+    IF buf <> '' AND length(buf) + length(para) + 2 > max_len THEN
+      INSERT INTO knowledge_chunks (file_id, idx, content) VALUES (NEW.id, n, buf);
+      n := n + 1;
+      buf := '';
+    END IF;
+    -- A paragraph longer than a chunk (common in extracted PDFs) is cut into pieces.
+    WHILE length(para) > max_len LOOP
+      INSERT INTO knowledge_chunks (file_id, idx, content) VALUES (NEW.id, n, left(para, max_len));
+      n := n + 1;
+      para := substr(para, max_len + 1);
+    END LOOP;
+    buf := CASE WHEN buf = '' THEN para ELSE buf || E'\n\n' || para END;
+  END LOOP;
+  IF buf <> '' THEN
+    INSERT INTO knowledge_chunks (file_id, idx, content) VALUES (NEW.id, n, buf);
+  END IF;
+  RETURN NULL;
+END $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS knowledge_files_rechunk ON knowledge_files;
+CREATE TRIGGER knowledge_files_rechunk AFTER INSERT OR UPDATE OF content ON knowledge_files
+  FOR EACH ROW EXECUTE FUNCTION knowledge_rechunk();

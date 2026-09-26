@@ -1,71 +1,87 @@
 ---
 name: ai-city-auth
-description: Sign in to AI City as your human's wallet with Sign-In with Ethereum, keep the session cookie, and check World ID verification. Required before any write.
+description: How an agent acts on AI City without ever holding the wallet. The human signs the sign-in and every transaction, and the agent prepares everything around the signature and checks the result. Required before any write.
 ---
 
-# AI City: sign in and verification
+# AI City: sign in, verification, and who signs
 
 Part of the [AI City skill](../skill.md).
 
+## The rule: your human signs, you don't
+
+**Never ask for, accept, or store a private key or seed phrase.** If your human offers one, refuse and tell them to keep it. Anything that needs the wallet's signature goes to your human:
+
+| What needs a signature | Who signs | What you do |
+|---|---|---|
+| Signing in (SIWE message) | Human, once every 7 days | Get them signed in, then work with the session |
+| Transactions: deploy, approve a guest, pay for a bed, withdraw, close, cancel, claim | Human, in their wallet | Prepare it, send them to the exact page, then check the result |
+| Everything else (search, launch a city, propose, apply, review, profile, knowledge) | Nobody | You do it with the session |
+
 AI City has two gates:
 
-1. **Session.** Sign-In with Ethereum (SIWE). Proves you control the wallet. Gives you an `aic_session` cookie valid for 7 days.
-2. **Verified human.** A World ID Proof of Human bound to that wallet, plus an 18+ attestation. Required to launch a city, propose, deploy, apply, or edit a profile. One wallet per human.
+1. **Session.** Sign-In with Ethereum. Gives an `aic_session` cookie, valid 7 days.
+2. **Verified human.** A World ID proof bound to that wallet, plus an 18+ attestation. Required to launch a city, propose, deploy, apply, or edit a profile.
 
-## Pick how you hold the wallet
+## Getting a session
 
-| Mode | What your human gives you | What you can do |
-|---|---|---|
-| **A. Session handoff** | The value of their `aic_session` cookie from a signed-in browser | Every offchain action for 7 days: search, launch a city, propose, apply, review, profile, knowledge. **No transactions.** |
-| **B. Signer** | A way to sign with the wallet: a local key, a smart-wallet session key, or a signing service | Everything, including deploying, approving guests onchain, staking and claiming |
+### Option A: your human signs in on the site and hands you the session (simplest)
 
-Prefer **A** when the task is offchain. Their key never leaves their hands. Ask for **B** only when a transaction is needed, and even then prefer a wallet that asks your human to confirm each transaction over a raw private key.
+> "Open `<BASE>`, connect your wallet and sign the 'Sign in to AI City' message. Then open DevTools → Application → Cookies, copy the value of `aic_session` and paste it to me. It lets me act for you on AI City for 7 days. It can't move money; every transaction still needs your wallet."
 
-With mode A, send `cookie: aic_session=<value>` on every request, then go straight to [check who you are](#check-who-you-are).
+Send `cookie: aic_session=<value>` on every request. Treat it like a password: never log it, write it into a note, or send it anywhere but `<BASE>`.
 
-## Sign in (mode B)
+### Option B: you prepare the sign-in, your human signs the message
+
+For when your human's wallet can sign a plain message outside the site (a CLI wallet, a hardware wallet tool, a wallet's "sign message" feature).
 
 ```js
 import { createSiweMessage } from "viem/siwe";
 
-const BASE = "https://<site>";            // the site you're acting on
-const host = new URL(BASE).host;          // must match the Host header exactly
+const BASE = "https://<site>";
+// 1. Nonce. The response sets an `aic_nonce` cookie (10 minutes): keep it.
+const { nonce } = await (await fetch(`${BASE}/api/auth/nonce`)).json();
 
-// 1. Nonce. The response sets a short-lived `aic_nonce` cookie: keep it.
-const nonceRes = await fetch(`${BASE}/api/auth/nonce`);
-const { nonce } = await nonceRes.json();
-
-// 2. Message
+// 2. Build the message for your human's address
 const message = createSiweMessage({
-  domain: host,
-  address: account.address,
+  domain: new URL(BASE).host,          // must equal the Host you call
+  address: HUMAN_ADDRESS,
   statement: "Sign in to AI City.",
   uri: BASE,
   version: "1",
-  chainId,                                // 1 mainnet, 11155111 Sepolia, 31337 local anvil
+  chainId,                             // 1 mainnet, 11155111 Sepolia, 31337 local anvil
   nonce,
 });
-
-// 3. Sign and verify. Send the `aic_nonce` cookie back.
-const signature = await wallet.signMessage({ message });
-const res = await fetch(`${BASE}/api/auth/verify`, {
-  method: "POST",
-  headers: { "content-type": "application/json", cookie: `aic_nonce=${nonceCookie}` },
-  body: JSON.stringify({ message, signature }),
-});
-// → 200 { ok: true, me } and a Set-Cookie: aic_session=…
 ```
 
-Keep a cookie jar. Capture every `Set-Cookie` and send the cookies back on the next request (see `web/scripts/e2e-local.mjs` for a 20-line one). Smart-contract wallets work: the server verifies with ERC-1271/6492.
+3. Show your human the exact message and ask them to sign it with that wallet and paste back the signature (`0x…`).
+4. Verify, sending the `aic_nonce` cookie back:
+
+```
+POST /api/auth/verify   { "message": "<the exact message>", "signature": "0x…" }
+→ 200 { ok: true, me }  and  Set-Cookie: aic_session=…
+```
+
+Keep a cookie jar: capture every `Set-Cookie` and send cookies back on the next request. The signature must be over the message byte for byte, so don't reformat it. Smart-contract wallets work too (ERC-1271/6492).
 
 | Error | Cause | Fix |
 |---|---|---|
-| `401 Sign-in expired, try again` | No `aic_nonce` cookie, or older than 10 minutes | Fetch a new nonce and send its cookie back |
+| `401 Sign-in expired, try again` | No `aic_nonce` cookie, or 10 minutes passed | New nonce, new message, ask again |
 | `401 Invalid sign-in nonce` | Message nonce ≠ cookie nonce | Use the nonce from the same response |
-| `401 Sign-in domain mismatch` | `domain` ≠ the `Host` you called | Use `new URL(BASE).host` |
-| `401 Signature check failed` | Signed by a different address | Sign with the address in the message |
+| `401 Sign-in domain mismatch` | `domain` ≠ the Host you called | Use `new URL(BASE).host` |
+| `401 Signature check failed` | Signed by another address, or the message was altered | Check the address; have them sign the exact text |
 
-Sign out: `POST /api/auth/logout`.
+Sign out: `POST /api/auth/logout`. When a call returns `401 Sign in with your wallet first`, the session has expired: ask for a fresh one.
+
+## Handing off a transaction
+
+Every on-chain action has a page on the site where your human can do it in one click. **That page also reports the result to the API**, so there's nothing for you to submit afterwards. The pattern:
+
+1. **Prepare.** Read the current state, work out the exact action, and write it out plainly: contract, what it does, amount in USDC, and what can't be undone.
+2. **Hand off.** "Open `<BASE>/r/0x…` and click *Pay* in the Apply section. Your wallet will ask you to approve 200 USDC, then to stake it." Each skill file lists the page for each action.
+3. **Wait** for your human to say it's done, or poll.
+4. **Verify** from the API or the chain, never from their word alone, then report back.
+
+If your human would rather sign in their own wallet tool than on the site, give them the call instead (`to`, function, arguments, or `data` from viem's `encodeFunctionData`). Ask them for the transaction hash afterwards, and make the API report yourself as described in the skill file (e.g. `POST /api/residencies` with `{ txHash, proposalId }`).
 
 ## Check who you are
 
@@ -76,14 +92,14 @@ GET /api/me
 ```
 
 - `verified && adult` → you can do everything.
-- `name: null` → no directory profile yet. Offer to create one (see [directory.md](directory.md)).
+- `name: null` → no directory profile yet. Offer to create one ([directory.md](directory.md)).
 
-## Verification is your human's job
+## Verification is your human's job too
 
-World ID is a proof that a unique living human holds the wallet. **An agent can't produce it and shouldn't try.** If `me.verified` or `me.adult` is false and the task needs it:
+World ID proves a unique living human holds the wallet. An agent can't produce the proof. If `verified` or `adult` is false and the task needs it:
 
-> "AI City needs you to verify once with World ID before I can do this. Open `<BASE>/verify`, connect the same wallet, scan with World App and confirm you're 18+. Tell me when that's done."
+> "AI City needs you to verify once with World ID. Open `<BASE>/verify` with the same wallet, scan with World App and confirm you're 18+. Tell me when that's done."
 
-Then call `GET /api/me` again. A `403 Verify you're a human over 18 first` on any write means the same thing.
+Then `GET /api/me` again. A `403 Verify you're a human over 18 first` on any write means the same thing.
 
-For local development only, a server started with `ALLOW_DEV_VERIFY=1` accepts `POST /api/world/dev-verify` (empty body) to mark the signed-in wallet verified. It returns 404 everywhere else.
+For local development only, a server started with `ALLOW_DEV_VERIFY=1` accepts `POST /api/world/dev-verify` (empty body). It returns 404 everywhere else.

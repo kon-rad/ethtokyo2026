@@ -37,7 +37,7 @@ POST /api/cities
 Your human is now the city's **founder**. Its page is `/cities/{slug}`. Next, offer to:
 
 1. Add co-organisers to the core team.
-2. Seed the city's knowledge base ([knowledge.md](knowledge.md)) so its concierge can answer questions about it.
+2. Seed the city's knowledge base ([knowledge.md](knowledge.md)) so its concierge can answer questions about it. Only the founder can edit it; every residency in the city's concierge reads it too.
 3. Propose the first residency in it ([launch-residency.md](launch-residency.md)).
 
 ## Edit

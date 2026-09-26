@@ -1,25 +1,12 @@
-import { loadResidencyKnowledge, buildConciergePrompt } from "@/lib/concierge/knowledge";
+import { buildConciergePrompt, resolveScope } from "@/lib/concierge/knowledge";
 import { chatTogether } from "@/lib/concierge/chat-together";
 import { handle, fail, readJson } from "@/lib/server/http";
 
-type Ctx = { params: Promise<{ address: string }> };
-
-export const POST = handle(async (req: Request, ctx: Ctx) => {
-  const { address } = await ctx.params;
-  const { message, userAddress } = (await readJson(req)) as {
-    message?: string;
-    userAddress?: string;
-  };
-
-  if (!message) fail(400, "message is required");
-
-  const knowledge = loadResidencyKnowledge(address);
-  const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
-
-  const systemPrompt = buildConciergePrompt(`residency ${shortAddress}`, `Residency ${shortAddress}`, knowledge);
-  const filenames = knowledge.map((f) => f.filename);
-
-  const result = await chatTogether(systemPrompt, message, filenames);
-
-  return Response.json(result);
+/** Ask the residency's concierge. It reads the residency's knowledge and its city's. */
+export const POST = handle(async (req: Request, ctx: { params: Promise<{ address: string }> }) => {
+  const { message } = (await readJson(req)) as { message?: string };
+  if (!message?.trim()) fail(400, "message is required");
+  const scope = await resolveScope("residency", (await ctx.params).address);
+  const { prompt, sources } = await buildConciergePrompt(scope, message.slice(0, 2000));
+  return Response.json(await chatTogether(prompt, message.slice(0, 2000), sources));
 });
