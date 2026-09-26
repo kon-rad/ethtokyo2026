@@ -14,13 +14,34 @@ This is the internal log. The public build journal at `/devlog` (`web/app/devlog
 | Deployment | **Sepolia only.** Factory `0x7A2E3f097Abd3c1a59D5a762f29d1f02E5A63f89`, mock USDC `0x0abd146eb01d8b923c2162489e006b7b01c77a57`, deploy block 11787037. Not on mainnet yet. |
 | Web app | Next.js 16 in `web/`. City layer, proposals, residencies, directory, profiles, docs, blog, devlog, board, concierge, knowledge bases. Runs locally on port 3100. **Live (Sepolia, read-only)** on the shared droplet's IP over HTTP; deploy with `web/scripts/deploy-droplet.sh`. |
 | E2E | `web/scripts/e2e-local.mjs`, 53/53 passing as of `d61ea87`. |
-| Uncommitted | `contracts/script/DeploySepolia.s.sol`: mints test USDC to the real broadcaster (`vm.readCallers()`) instead of Foundry's default sender. |
+| Uncommitted | Nothing. |
 
 **Doc drift to fix:** `docs/master-plan.md` §4 says contracts are on mainnet and the app is on Vercel; neither is true yet. `docs/SECURITY.md` says 28 unit tests and 37 e2e checks; the latest counts are 30 contract tests and 53 e2e checks.
 
 **Next up (from the README and master plan):** a domain + TLS for the droplet instance so sign-in works, and a World ID staging app; then mainnet deploy with a hardware wallet, Neon + Vercel, 1 USDC smoke-test city, then the Edge City Goa scope (city vault, concierge agents, Reachy house robot, drone budget).
 
 ---
+
+## 2026-09-27 — Pi Zero offline transaction signer
+**Commit:** uncommitted
+
+- `web/hardware/pi-zero/zero-tx-signer.py`: an air-gapped signing daemon on `/dev/ttyGS0`. It generates a BIP-39 key on the first offline boot (`/var/lib/zero-signer/mnemonic`, 0600) and signs EIP-1559 transactions sent as `SIGN:<json>`. It enforces a policy set by `ZERO_CHAIN_IDS` (default Sepolia), `ZERO_MAX_VALUE_WEI` (0.05 ETH) and `ZERO_MAX_FEE_WEI` (0.02 ETH), and refuses contract creation. It decodes Residency, ResidencyFactory and ERC-20 calls by name with `eth_abi`. No command exports the key.
+- `web/hardware/pi-zero/zero-tx-signer.service`: systemd unit with the venv at `/opt/zero-signer/venv`.
+- `web/hardware/pi-zero/cold-sign.py` (Mac, `uv run`, pyserial only): gets the nonce, fees and gas over JSON-RPC and encodes calldata with `cast calldata`. It sends the transaction to the Zero, checks the signer address, then broadcasts and waits for the receipt. `addr` prints the address and balance; `--no-broadcast` signs only.
+- `docs/pi-zero-offline-signer-setup.md`: install while online, then `disable-wifi`/`disable-bt` overlays and SSH off. The key is generated offline. The gadget loads via `/etc/modules-load.d` instead of `cmdline.txt`, and pip uses `--only-binary=:all:` so the Zero doesn't compile `pydantic-core`.
+- Verified on the Mac against anvil through a virtual serial pair: `addr`, a 0.01 ETH transfer signed and mined, `stake(uint256)` decoded with `--no-broadcast`, a 0.5 ETH transfer refused by the cap. Not yet run on the Zero itself.
+- **Known gaps:** no physical confirm button or screen, so the Mac's display is trusted (needed before mainnet). The seat-key `zero-signer.py` still opens `/dev/ttyAMA0`, and both signers want `/dev/ttyGS0`, so run one at a time.
+
+## 2026-09-27 — Pi 4 + Arduino + servo + screen setup guide
+**Commit:** uncommitted
+
+- `docs/pi4-arduino-servo-screen-setup.md`: step-by-step build of the status board and latch from the parts in the cyberdeck inventory (Pi 4, 3.5" `piscreen,drm` display, Arduino Uno, SG90, 10-segment bar, MB102 for servo power).
+- Corrects the older guides for the real hardware: the screen covers GPIO 1–26 so the Uno is USB-only; kiosk via desktop autostart, not `xinit`; venv with `pyserial-asyncio` + `eth-account` (the old prereqs missed both); a systemd unit with the right user, Sepolia RPC and Foundry on `PATH`.
+- Documents that `/r/[address]/board` 404s unless the residency is in Postgres, and the live instance has no cities yet, so the board points at a local Sepolia dev server for now.
+- Not changed, flagged for the Pi Zero step: `zero-signer.py` opens `/dev/ttyAMA0` (should be `/dev/ttyGS0`), and `pi4-orchestrator.py` expects the Zero at `/dev/ttyGS0` (the host sees it as `/dev/ttyACM*`).
+- Verified: docs only; checked script pinouts against `web/hardware/`, and `GET /api/cities` on the live instance returned no cities.
+- Added §0 to the guide: a display-only fast path (no Arduino, nothing copied to the Pi) and a table of ways to move files from the Mac (`scp`, `rsync`, `git clone` once the hardware scripts are pushed). §5.1 now starts the dev server with `--hostname <mac-lan-ip>`: Next 16 blocks dev assets for other hostnames, so the Pi would get the board's HTML without its JavaScript and polling. Production isn't an option because `/api/world/dev-verify` 404s there.
+- Added `web/hardware/pi4/pi4-gpio-board.py` (`test` / `open` / `close` / `run`) and guide §6b for the no-Arduino path: 8-segment bar and SG90 on the free GPIO pins 27–40, servo powered from the breadboard power module. Verified with `py_compile` only; not yet run on the Pi.
 
 ## 2026-09-27 — Live Sepolia instance on the shared droplet
 **Commit:** deployed `167e5d9`; deploy script added in the commit after it

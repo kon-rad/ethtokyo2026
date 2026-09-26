@@ -23,10 +23,12 @@ contract SepoliaUSDC is ERC20 {
 contract DeploySepolia is Script {
     function run() external {
         vm.startBroadcast();
+        // msg.sender in run() is Foundry's default sender unless --sender is passed; ask for the broadcaster.
+        (, address deployer,) = vm.readCallers();
         SepoliaUSDC usdc = new SepoliaUSDC();
         ResidencyFactory factory = new ResidencyFactory(usdc);
         // Fund the deployer with 100k test USDC for smoke testing.
-        usdc.mint(msg.sender, 100_000e6);
+        usdc.mint(deployer, 100_000e6);
         vm.stopBroadcast();
         console.log("USDC:", address(usdc));
         console.log("ResidencyFactory:", address(factory));
