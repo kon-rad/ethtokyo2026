@@ -8,6 +8,14 @@ export const metadata: Metadata = {
 
 const posts = [
   {
+    href: "/blog/ai-city-app",
+    title: "AI City: A coordination primitive for the network state",
+    description:
+      "Pop-up cities on Ethereum mainnet, built from extropian philosophy, the infomorph stack, and the sovereign individual's toolkit. Live today.",
+    date: "2026-09-27",
+    tags: ["vision", "extropian", "infomorph", "product"],
+  },
+  {
     href: "/blog/connect-your-agent",
     title: "Connect your AI agent to AI City",
     description:
