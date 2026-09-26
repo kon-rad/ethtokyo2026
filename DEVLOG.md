@@ -12,15 +12,23 @@ This is the internal log. The public build journal at `/devlog` (`web/app/devlog
 |---|---|
 | Contracts | `Residency.sol` + `ResidencyFactory.sol`. 30 Foundry tests (unit, fuzz, invariant, mainnet fork). Unaudited. |
 | Deployment | **Sepolia only.** Factory `0x7A2E3f097Abd3c1a59D5a762f29d1f02E5A63f89`, mock USDC `0x0abd146eb01d8b923c2162489e006b7b01c77a57`, deploy block 11787037. Not on mainnet yet. |
-| Web app | Next.js 16 in `web/`. City layer, proposals, residencies, directory, profiles, docs, blog, devlog, board, concierge, knowledge bases. Runs locally on port 3100. **Live (Sepolia, read-only)** on the shared droplet's IP over HTTP; deploy with `web/scripts/deploy-droplet.sh`. |
+| Web app | Next.js 16 in `web/`. City layer, proposals, residencies, directory, profiles, docs, blog, devlog, board, concierge, knowledge bases. Runs locally on port 3100. **Live (Sepolia)** at https://aicity.cyou on the shared droplet; sign-in works, verification doesn't yet (World ID not configured); deploy with `web/scripts/deploy-droplet.sh`. |
 | E2E | `web/scripts/e2e-local.mjs`, 53/53 passing as of `d61ea87`. |
 | Uncommitted | Nothing. |
 
 **Doc drift to fix:** `docs/master-plan.md` §4 says contracts are on mainnet and the app is on Vercel; neither is true yet. `docs/SECURITY.md` says 28 unit tests and 37 e2e checks; the latest counts are 30 contract tests and 53 e2e checks.
 
-**Next up (from the README and master plan):** a domain + TLS for the droplet instance so sign-in works, and a World ID staging app; then mainnet deploy with a hardware wallet, Neon + Vercel, 1 USDC smoke-test city, then the Edge City Goa scope (city vault, concierge agents, Reachy house robot, drone budget).
+**Next up (from the README and master plan):** a World ID staging app for the live instance; then mainnet deploy with a hardware wallet, Neon + Vercel, 1 USDC smoke-test city, then the Edge City Goa scope (city vault, concierge agents, Reachy house robot, drone budget).
 
 ---
+
+## 2026-09-27 — aicity.cyou domain + HTTPS
+**Commit:** uncommitted (server config only; this entry)
+
+- DNS at Namecheap (BasicDNS): `A @` and `A www` → the droplet. Nginx `ai-city.conf` now serves `aicity.cyou` and `www.aicity.cyou` only; the bare IP no longer serves AI City.
+- Let's Encrypt certificate via `certbot --nginx --redirect` (both names, expires 2026-12-25, renewed by `certbot.timer`). HTTP redirects to HTTPS.
+- Fixes the sign-in gap from the droplet deploy: session cookies are `Secure`, and now they stick. Verified: `https://aicity.cyou/` and `https://www.aicity.cyou/` 200, `http://` 301 to HTTPS, `/api/auth/nonce` sets its cookie over HTTPS, Argo API `/health` still 200.
+- Still open: World ID is the staging placeholder, so nobody can verify, and writes stay blocked until a World ID staging app is configured.
 
 ## 2026-09-27 — Pi Zero offline transaction signer
 **Commit:** uncommitted
