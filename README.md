@@ -1,29 +1,32 @@
 # AI City
 
-Luma for pop-up cities. Hosts launch a city with dates, rooms and per-bed prices. Verified humans apply, hosts approve each guest for a bed, and guests stake USDC into the city's own contract. If the minimum isn't reached by the deadline, everyone is refunded. If it is, the host withdraws against uploaded receipts, and unspent funds return pro-rata at close.
+Luma for pop-up cities. Anyone can launch a city (a place and a time window, offchain). Inside each city, verified humans propose residencies with dates, rooms and per-bed prices. The city's core team approves each proposal, then the proposer deploys a Residency contract onchain. Guests apply, hosts approve each guest for a bed, and guests stake USDC into the residency's own contract. If the minimum isn't reached by the deadline, everyone is refunded. If it is, the host withdraws against uploaded receipts, and unspent funds return pro-rata at close.
 
 **Unaudited. Only deposit what you can afford to lose.**
 
 ## How it works
 
-| Step | Offchain (Next.js + Postgres) | Onchain (Ethereum, USDC) |
-|---|---|---|
-| Sign in | SIWE session cookie | — |
-| Verify | World ID Proof of Human (IDKit 4.x), verified server-side; nullifier stored UNIQUE (one wallet per human) + 18+ attestation | — |
-| Launch | Form → canonical metadata JSON | `AICityFactory.createCity` deploys a `PopupCity`; metadata keccak256 stored onchain |
-| Apply | Name, bio, links, preferred bed | — |
-| Approve | Recorded after the tx is mined | `approve(member, bedId, price)` |
-| Stake | — | `stake()` (USDC approve first) |
-| Deadline | — | `status()` → Active (≥ min seats) or Failed (refunds) |
-| Withdraw | Receipt file stored, sha256 checked against the event | `withdraw(amount, receiptHash, note)` |
-| Close / claim | — | `close()` → pro-rata leftovers; `claim()` |
+| Layer | Step | Offchain (Next.js + Postgres) | Onchain (Ethereum, USDC) |
+|---|---|---|---|
+| **City** | Launch | Form → `POST /api/cities` → saved in `cities` table | — |
+| | Core team | Founder adds members via `POST /api/cities/[slug]/team` | — |
+| | Edit | Core team updates dates/details via `PATCH /api/cities/[slug]` | — |
+| **Proposal** | Propose | Form → `POST /api/cities/[slug]/proposals` → validated, canonical JSON built | — |
+| | Review | Core team approves/rejects via `POST /api/proposals/[id]` | — |
+| **Residency** | Deploy | Proposer calls `POST /api/residencies` after the tx | `ResidencyFactory.createResidency` deploys a `Residency` |
+| | Apply | Name, bio, links, preferred bed → `POST /api/residencies/[addr]/apply` | — |
+| | Approve | Host records after the tx is mined | `approve(member, bedId, price)` |
+| | Stake | — | `stake()` (USDC approve first) |
+| | Deadline | — | `status()` → Active (≥ min seats) or Failed (refunds) |
+| | Withdraw | Receipt file stored, sha256 checked against the event | `withdraw(amount, receiptHash, note)` |
+| | Close / claim | — | `close()` → pro-rata leftovers; `claim()` |
 
 Architecture and design: [`docs/architecture-plan.md`](docs/architecture-plan.md). Security notes: [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Repo
 
 ```
-contracts/   Foundry: src/PopupCity.sol, src/AICityFactory.sol, tests (unit, fuzz, invariant, mainnet fork)
+contracts/   Foundry: src/Residency.sol, src/ResidencyFactory.sol, tests (unit, fuzz, invariant, mainnet fork)
 web/         Next.js 16 app: app/ (pages + API routes), lib/, components/, db/schema.sql, scripts/
 docs/        architecture plan, security notes, World ID debrief
 ```
@@ -47,7 +50,10 @@ cd ../web && pnpm install
 createdb ai_city && DATABASE_URL=postgres://localhost/ai_city node scripts/migrate.mjs
 cp .env.example .env.local   # fill in; for local use NEXT_PUBLIC_CHAIN_ID=31337 and ALLOW_DEV_VERIFY=1
 pnpm dev --port 3100
-node scripts/e2e-local.mjs   # 37 end-to-end checks against the running stack
+
+# seed demo data and run the full e2e test
+node scripts/seed-local.mjs
+node scripts/e2e-local.mjs
 ```
 
 After changing a contract: `forge build && node web/scripts/gen-abi.mjs`.
@@ -59,6 +65,24 @@ After changing a contract: `forge build && node web/scripts/gen-abi.mjs`.
 3. Neon Postgres → `node web/scripts/migrate.mjs`.
 4. Vercel: root `web/`, env vars from `web/.env.example` (`NEXT_PUBLIC_CHAIN_ID=1`, `NEXT_PUBLIC_WORLD_ENV=production`, no `ALLOW_DEV_VERIFY`).
 5. Smoke test with a 1 USDC city before announcing.
+
+## Pages
+
+| Path | Description |
+|---|---|
+| `/` | Home: mission, residencies, cities, people |
+| `/launch` | Launch a pop-up city |
+| `/cities` | Browse pop-up cities |
+| `/cities/[slug]` | City detail + its residencies + proposals (core team) |
+| `/cities/[slug]/manage` | Edit city, manage core team |
+| `/cities/[slug]/propose` | Propose a residency in this city |
+| `/proposals/[id]` | Proposal detail, review (core team) and deploy (proposer) |
+| `/series/[slug]` | Residency series with all its instances |
+| `/r/[address]` | Residency detail, apply, pay, treasury |
+| `/r/[address]/manage` | Host dashboard: applications, withdraw, lifecycle |
+| `/people` | Public directory |
+| `/people/[address]` | Person's profile and participation |
+| `/me` | Edit your own profile |
 
 ## Team
 

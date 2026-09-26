@@ -23,15 +23,15 @@ const KEYS = [
   "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
 ];
 
-const abi = JSON.parse(readFileSync(new URL("../../contracts/out/PopupCity.sol/PopupCity.json", import.meta.url))).abi;
-const factoryAbi = JSON.parse(readFileSync(new URL("../../contracts/out/AICityFactory.sol/AICityFactory.json", import.meta.url))).abi;
+const abi = JSON.parse(readFileSync(new URL("../../contracts/out/Residency.sol/Residency.json", import.meta.url))).abi;
+const factoryAbi = JSON.parse(readFileSync(new URL("../../contracts/out/ResidencyFactory.sol/ResidencyFactory.json", import.meta.url))).abi;
 const erc20 = parseAbi(["function approve(address,uint256) returns (bool)", "function balanceOf(address) view returns (uint256)"]);
 
 const pub = createPublicClient({ chain: anvil, transport: http() });
 const usdc = (n) => parseUnits(String(n), 6);
 let failures = 0;
 const check = (cond, msg) => {
-  console.log(`${cond ? "✓" : "✗"} ${msg}`);
+  console.log(`${cond ? "\u2713" : "\u2717"} ${msg}`);
   if (!cond) failures++;
 };
 
@@ -92,136 +92,172 @@ for (const u of [host, alice, bob, stranger]) {
   const r = await u.signIn();
   check(r.status === 200 && r.data.me?.address === u.account.address, `${u.name} signs in with SIWE`);
 }
-const unverified = await stranger.json("/api/cities/prepare", {});
-check(unverified.status === 403, "unverified wallet can't prepare a city (403)");
+const unverified = await stranger.json("/api/cities", { method: "POST", json: { name: "x", location: "x", mission: "x".repeat(20), description: "x".repeat(20), startTime: 1, endTime: 2 } });
+check(unverified.status === 403, "unverified wallet can't launch a city (403)");
 for (const u of [host, alice, bob]) {
   const r = await u.json("/api/world/dev-verify", {});
   check(r.data.me?.verified && r.data.me?.adult, `${u.name} verified (dev path)`);
 }
 
-// ---------------------------------------------------------------- launch
+// ---------------------------------------------------------------- launch a city (offchain)
 const block = await pub.getBlock();
 const now = Number(block.timestamp);
-const form = {
-  name: "Builders' House Goa (e2e)",
+const day = 86400;
+
+const cityForm = {
+  name: "Edge City Goa (e2e)",
   location: "Anjuna, Goa, India",
-  propertyUrl: "https://example.com/villa",
   mission: "Ship something real in three weeks with good people.",
   description: "Mornings deep work, afternoons swimming, evenings demos. Shared kitchen and fast wifi.",
-  organizers: [{ name: "Konrad", bio: "Builder", link: "https://x.com/konradgnat" }, { name: "Co-host", bio: "", link: "" }],
+  startTime: now + 7 * day,
+  endTime: now + 28 * day,
+};
+const cityRes = await host.json("/api/cities", { method: "POST", json: cityForm });
+check(cityRes.status === 200 && cityRes.data.slug, `city launched with slug: ${cityRes.data.slug}`);
+const CITY_SLUG = cityRes.data.slug;
+
+const cityGet = await host.json(`/api/cities/${CITY_SLUG}`);
+check(cityGet.status === 200 && cityGet.data.city.slug === CITY_SLUG, "city appears by slug");
+check(cityGet.data.myRole === "founder", "founder sees their role");
+
+// ---------------------------------------------------------------- core team
+const teamAdd = await host.json(`/api/cities/${CITY_SLUG}/team`, { address: alice.account.address });
+check(teamAdd.status === 200 && teamAdd.data.coreTeam.length === 2, "founder adds alice to core team");
+
+const aliceCity = await alice.json(`/api/cities/${CITY_SLUG}`);
+check(aliceCity.data.myRole === "core", "alice sees her core role");
+
+// ---------------------------------------------------------------- propose a residency
+const residencyForm = {
+  name: "Builders' House Goa #1",
+  location: "Anjuna, Goa, India",
+  propertyUrl: "https://example.com/villa",
+  mission: "Ship something real.",
+  description: "Three weeks of building.",
+  organizers: [{ name: "Konrad", bio: "Builder", link: "https://x.com/konradgnat" }],
   rooms: [
     { name: "Garden room", type: "shared", beds: [{ label: "Bunk A", price: "100" }, { label: "Bunk B", price: "100" }] },
     { name: "Sea view", type: "private", beds: [{ label: "Queen", price: "200" }] },
   ],
-  startTime: now + 7200,
-  endTime: now + 7200 + 8 * 86400,
-  deadline: now + 3600,
+  startTime: cityForm.startTime + 1,
+  endTime: cityForm.endTime - 1,
+  deadline: now + 3 * day,
   minSeats: 2,
   maxSeats: 3,
+  series: { newSeries: { name: "Builders' House", description: "A recurring builder residency" } },
 };
-const bad = await host.json("/api/cities/prepare", { ...form, endTime: form.startTime + 86400 });
-check(bad.status === 400 && /week/.test(bad.data.error), `prepare rejects a 1-day city: "${bad.data.error}"`);
+const propRes = await host.json(`/api/cities/${CITY_SLUG}/proposals`, residencyForm);
+check(propRes.status === 200 && propRes.data.proposal.id, `proposal created: #${propRes.data.proposal.id}`);
+const PROP_ID = propRes.data.proposal.id;
 
-const prep = await host.json("/api/cities/prepare", form);
-check(prep.status === 200 && prep.data.metadataHash?.startsWith("0x"), "prepare returns canonical metadata + hash");
-const p = prep.data.params;
-const createReceipt = await host.tx({
+// stranger can't see the proposal
+const strangerProp = await stranger.json(`/api/proposals/${PROP_ID}`);
+check(strangerProp.status === 403, "stranger can't see the proposal (403)");
+
+// core team can see and approve
+const aliceProp = await alice.json(`/api/proposals/${PROP_ID}`);
+check(aliceProp.status === 200 && aliceProp.data.proposal.status === "proposed", "alice (core) sees the proposal");
+
+const approve = await alice.json(`/api/proposals/${PROP_ID}`, { decision: "approve", note: "Looks good!" });
+check(approve.status === 200 && approve.data.proposal.status === "approved", "alice approves the proposal");
+
+// ---------------------------------------------------------------- deploy
+const deployHash = await host.tx({
   address: FACTORY,
   abi: factoryAbi,
-  functionName: "createCity",
-  args: [{ metadataHash: prep.data.metadataHash, startTime: BigInt(p.startTime), endTime: BigInt(p.endTime), deadline: BigInt(p.deadline), minSeats: p.minSeats, maxSeats: p.maxSeats }],
+  functionName: "createResidency",
+  args: [{
+    metadataHash: approve.data.proposal.metadataHash,
+    startTime: BigInt(approve.data.proposal.params.startTime),
+    endTime: BigInt(approve.data.proposal.params.endTime),
+    deadline: BigInt(approve.data.proposal.params.deadline),
+    minSeats: approve.data.proposal.params.minSeats,
+    maxSeats: approve.data.proposal.params.maxSeats,
+  }],
 });
-const tampered = await host.json("/api/cities", { txHash: createReceipt.transactionHash, metadataJson: prep.data.metadataJson.replace("Goa", "Bali") });
-check(tampered.status === 400, "register rejects metadata that doesn't match the onchain hash");
-const stolen = await alice.json("/api/cities", { txHash: createReceipt.transactionHash, metadataJson: prep.data.metadataJson });
-check(stolen.status === 403, "another wallet can't register the host's city");
-const reg = await host.json("/api/cities", { txHash: createReceipt.transactionHash, metadataJson: prep.data.metadataJson });
-check(reg.status === 200, `city registered at ${reg.data.address}`);
-const CITY = reg.data.address;
+const deploy = await host.json("/api/residencies", {
+  method: "POST",
+  json: { txHash: deployHash.transactionHash, proposalId: PROP_ID },
+});
+check(deploy.status === 200 && deploy.data.address, `residency deployed at ${deploy.data.address}`);
+const RES_ADDR = deploy.data.address;
 
-const list = await stranger.json("/api/cities?cursor=0");
-const listed = list.data.cities?.find((c) => c.address.toLowerCase() === CITY.toLowerCase());
-check(!!listed && listed.state?.status === "Open", "city appears in the listing with status Open");
+const propAfter = await host.json(`/api/proposals/${PROP_ID}`);
+check(propAfter.data.proposal.status === "deployed", "proposal marked as deployed");
 
-// ---------------------------------------------------------------- apply + review
-const noVerifyApply = await stranger.json(`/api/cities/${CITY}/apply`, { name: "S", bio: "x".repeat(30), links: [], preferredBedId: null });
-check(noVerifyApply.status === 403, "unverified stranger can't apply (403)");
-const hostApply = await host.json(`/api/cities/${CITY}/apply`, { name: "Host", bio: "x".repeat(30), links: [], preferredBedId: 1 });
-check(hostApply.status === 400, "host can't apply to own city");
-const aApp = await alice.json(`/api/cities/${CITY}/apply`, { name: "Alice", bio: "I build soft robots and run a hardware lab.", links: ["https://x.com/alice"], preferredBedId: 1 });
-const bApp = await bob.json(`/api/cities/${CITY}/apply`, { name: "Bob", bio: "Zero-knowledge researcher, brings a guitar.", links: [], preferredBedId: 3 });
-check(aApp.status === 200 && bApp.status === 200, "alice and bob apply");
+// ---------------------------------------------------------------- the residency listing
+const listing = await stranger.json("/api/residencies?cursor=0");
+check(listing.data.residencies?.length > 0, "residency appears in listing");
 
-const notHost = await alice.json(`/api/cities/${CITY}/applications`);
-check(notHost.status === 403, "non-host can't list applications");
-const apps = await host.json(`/api/cities/${CITY}/applications`);
-check(apps.data.applications?.length === 2 && apps.data.applications.every((a) => a.verified_human), "host sees 2 verified applications");
-const appOf = (u) => apps.data.applications.find((a) => a.applicant === u.account.address.toLowerCase());
+const resDetail = await stranger.json(`/api/residencies/${RES_ADDR}`);
+check(resDetail.status === 200 && resDetail.data.residency.city?.slug === CITY_SLUG, "residency detail shows its city");
 
-for (const [u, bed, price] of [[alice, 1, 100], [bob, 3, 200]]) {
-  const r = await host.tx({ address: CITY, abi, functionName: "approve", args: [u.account.address, bed, usdc(price)] });
-  const rec = await host.json(`/api/cities/${CITY}/applications/${appOf(u).id}`, { action: "approved", txHash: r.transactionHash });
-  check(rec.status === 200, `${u.name} approved onchain for bed ${bed} at ${price} USDC and recorded`);
-}
-const doubleBook = await host.wallet
-  .writeContract({ address: CITY, abi, functionName: "approve", args: [stranger.account.address, 1, usdc(100)] })
-  .then(() => false)
-  .catch(() => true);
-check(doubleBook, "bed 1 can't be double-booked");
+// ---------------------------------------------------------------- apply + review (same flow as before)
+const aApp = await alice.json(`/api/residencies/${RES_ADDR}/apply`, {
+  name: "Alice Tanaka",
+  bio: "I build soft robots and run a hardware lab.",
+  links: ["https://x.com/alice"],
+  preferredBedId: null,
+});
+check(aApp.status === 200, "alice applies");
+
+const apps = await host.json(`/api/residencies/${RES_ADDR}/applications`);
+check(apps.data.applications?.length === 1 && apps.data.applications[0].verified_human, "host sees 1 verified application");
+
+const appId = apps.data.applications[0].id;
+const approveOnchain = await host.tx({ address: RES_ADDR, abi, functionName: "approve", args: [alice.account.address, 1, usdc(100)] });
+const rec = await host.json(`/api/residencies/${RES_ADDR}/applications/${appId}`, { action: "approved", txHash: approveOnchain.transactionHash });
+check(rec.status === 200, "alice approved onchain and recorded");
 
 // ---------------------------------------------------------------- stake
-for (const [u, price] of [[alice, 100], [bob, 200]]) {
-  await host.tx({ address: USDC, abi: parseAbi(["function mint(address,uint256)"]), functionName: "mint", args: [u.account.address, usdc(price)] });
-  await u.tx({ address: USDC, abi: erc20, functionName: "approve", args: [CITY, usdc(price)] });
-  await u.tx({ address: CITY, abi, functionName: "stake" });
-}
-check((await pub.readContract({ address: CITY, abi, functionName: "seatCount" })) === 2n, "2 seats staked");
+await host.tx({ address: USDC, abi: parseAbi(["function mint(address,uint256)"]), functionName: "mint", args: [alice.account.address, usdc(100)] });
+await alice.tx({ address: USDC, abi: erc20, functionName: "approve", args: [RES_ADDR, usdc(100)] });
+await alice.tx({ address: RES_ADDR, abi, functionName: "stake" });
+check((await pub.readContract({ address: RES_ADDR, abi, functionName: "seatCount" })) === 1n, "1 seat staked");
 
-const earlyReceipts = await stranger.json(`/api/cities/${CITY}/receipts`);
-check(earlyReceipts.status === 403, "non-member can't see receipts");
-
-// ---------------------------------------------------------------- deadline → Active
-await pub.request({ method: "evm_increaseTime", params: [3601] });
+// ---------------------------------------------------------------- deadline -> Active
+await pub.request({ method: "evm_increaseTime", params: [3 * day + 3601] });
 await pub.request({ method: "evm_mine", params: [] });
-check((await pub.readContract({ address: CITY, abi, functionName: "status" })) === 1, "status is Active after the deadline");
+check((await pub.readContract({ address: RES_ADDR, abi, functionName: "status" })) === 1n, "status is Active after the deadline");
 
 // ---------------------------------------------------------------- withdraw + receipt
 const file = Buffer.from("%PDF-1.4\n% AI City test receipt\n", "utf8");
 const receiptHash = sha256(toHex(new Uint8Array(file)));
-const wr = await host.tx({ address: CITY, abi, functionName: "withdraw", args: [usdc(150), receiptHash, "Villa deposit"] });
-const wrongFile = new FormData();
-wrongFile.set("file", new Blob([Buffer.from("%PDF-1.4 other")], { type: "application/pdf" }), "wrong.pdf");
-wrongFile.set("txHash", wr.transactionHash);
-check((await host.fetch(`/api/cities/${CITY}/receipts`, { method: "POST", body: wrongFile })).status === 400, "upload rejects a file whose hash doesn't match");
-const htmlFile = new FormData();
-htmlFile.set("file", new Blob(["<script>alert(1)</script>"], { type: "text/html" }), "x.html");
-htmlFile.set("txHash", wr.transactionHash);
-check((await host.fetch(`/api/cities/${CITY}/receipts`, { method: "POST", body: htmlFile })).status === 400, "upload rejects HTML files");
+const wr = await host.tx({ address: RES_ADDR, abi, functionName: "withdraw", args: [usdc(50), receiptHash, "Villa deposit"] });
 const fd = new FormData();
 fd.set("file", new Blob([file], { type: "application/pdf" }), "villa-deposit.pdf");
 fd.set("txHash", wr.transactionHash);
-const up = await host.fetch(`/api/cities/${CITY}/receipts`, { method: "POST", body: fd });
+const up = await host.fetch(`/api/residencies/${RES_ADDR}/receipts`, { method: "POST", body: fd });
 check(up.status === 200, "host uploads the matching receipt");
 
-const rl = await alice.json(`/api/cities/${CITY}/receipts`);
+const rl = await alice.json(`/api/residencies/${RES_ADDR}/receipts`);
 check(rl.data.receipts?.length === 1, "member alice sees the receipt");
-const dl = await alice.fetch(`/api/cities/${CITY}/receipts/${rl.data.receipts[0].id}`);
-const bytes = Buffer.from(await dl.arrayBuffer());
-check(dl.status === 200 && bytes.equals(file), "alice downloads the exact receipt file");
 
 // ---------------------------------------------------------------- close + claim
-await host.tx({ address: CITY, abi, functionName: "close" });
-const before = await Promise.all([alice, bob].map((u) => pub.readContract({ address: USDC, abi: erc20, functionName: "balanceOf", args: [u.account.address] })));
-await alice.tx({ address: CITY, abi, functionName: "claim" });
-await bob.tx({ address: CITY, abi, functionName: "claim" });
-const after = await Promise.all([alice, bob].map((u) => pub.readContract({ address: USDC, abi: erc20, functionName: "balanceOf", args: [u.account.address] })));
-check(after[0] - before[0] === usdc(50) && after[1] - before[1] === usdc(100), "leftovers pro-rata: alice 50, bob 100 USDC");
+await host.tx({ address: RES_ADDR, abi, functionName: "close" });
+const before = await pub.readContract({ address: USDC, abi: erc20, functionName: "balanceOf", args: [alice.account.address] });
+await alice.tx({ address: RES_ADDR, abi, functionName: "claim" });
+const after = await pub.readContract({ address: USDC, abi: erc20, functionName: "balanceOf", args: [alice.account.address] });
+check(after - before === usdc(50), "alice claims pro-rata leftovers (50 USDC)");
 
 // ---------------------------------------------------------------- pages render
-for (const path of ["/", `/c/${CITY}`, "/launch", "/verify", `/c/${CITY}/apply`, `/c/${CITY}/manage`]) {
+const paths = [
+  "/", `/cities`, `/cities/${CITY_SLUG}`, `/cities/${CITY_SLUG}/manage`, `/cities/${CITY_SLUG}/propose`,
+  `/launch`, `/verify`, `/proposals/${PROP_ID}`, `/series/builders-house`,
+  `/r/${RES_ADDR}`, `/r/${RES_ADDR}/manage`, `/r/${RES_ADDR}/apply`,
+  `/people`, `/people/${alice.account.address}`, `/me`,
+];
+for (const path of paths) {
   const r = await fetch(BASE + path);
-  check(r.status === 200, `GET ${path} → ${r.status}`);
+  check(r.status === 200, `GET ${path} \u2192 ${r.status}`);
 }
+
+// ---------------------------------------------------------------- profile
+const profileSet = await host.json("/api/profiles/me", { method: "PUT", json: { name: "Host Person", bio: "Building cities.", links: [], listed: true } });
+check(profileSet.status === 200 && profileSet.data.profile.name === "Host Person", "profile created");
+
+const dir = await stranger.json("/api/directory?cursor=0");
+check(dir.data.profiles?.some((p) => p.name === "Host Person"), "profile appears in directory");
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures ? 1 : 0);

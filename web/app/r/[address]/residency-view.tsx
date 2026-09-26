@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { usePublicClient } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
@@ -47,6 +48,22 @@ export function ResidencyView({ residency }: { residency: ResidencyDto }) {
             <p className="text-muted">
               🗓 <LocalDate at={residency.startTime} /> → <LocalDate at={residency.endTime} /> · {durationLabel(residency.startTime, residency.endTime)}
             </p>
+            {residency.city && (
+              <p className="text-sm text-muted">
+                🏙 Part of{" "}
+                <Link href={`/cities/${residency.city.slug}`} className="font-medium text-indigo-600 hover:underline">
+                  {residency.city.name}
+                </Link>
+              </p>
+            )}
+            {residency.series && (
+              <p className="text-sm text-muted">
+                📋 Series:{" "}
+                <Link href={`/series/${residency.series.slug}`} className="font-medium text-indigo-600 hover:underline">
+                  {residency.series.name}
+                </Link>
+              </p>
+            )}
             {m.propertyUrl && (
               <a href={m.propertyUrl} target="_blank" rel="noreferrer" className="inline-block text-sm font-medium text-indigo-600 hover:underline">
                 View the proposed property ↗

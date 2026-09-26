@@ -1,8 +1,8 @@
 // Seeds a local stack (anvil + DeployLocal + `pnpm dev` with ALLOW_DEV_VERIFY=1) with demo cities
-// so the UI has something to show. Uses anvil's test accounts:
-//   #0 host — launches every city (import it in MetaMask to use the host dashboard)
-//   #1 alice — approved for a bed in the Goa city (import it to try paying)
-//   #2 bob — pending application in the Goa city
+// and residencies so the UI has something to show. Uses anvil's test accounts:
+//   #0 host — launches the city, proposes residencies (import it in MetaMask to use the host dashboard)
+//   #1 alice — approved for a bed in the Goa residency
+//   #2 bob — pending application
 //   node scripts/seed-local.mjs [baseUrl]
 import { createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -17,9 +17,9 @@ const env = Object.fromEntries(
     .filter((l) => l.includes("=") && !l.startsWith("#"))
     .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
 );
-const read = (f, c) => JSON.parse(readFileSync(new URL(`../../contracts/out/${f}/${c}.json`, import.meta.url))).abi;
-const factoryAbi = read("AICityFactory.sol", "AICityFactory");
-const cityAbi = read("PopupCity.sol", "PopupCity");
+const readAbi = (f, c) => JSON.parse(readFileSync(new URL(`../../contracts/out/${f}/${c}.json`, import.meta.url))).abi;
+const factoryAbi = readAbi("ResidencyFactory.sol", "ResidencyFactory");
+const residencyAbi = readAbi("Residency.sol", "Residency");
 const pub = createPublicClient({ chain: anvil, transport: http() });
 
 function user(key) {
@@ -62,14 +62,32 @@ const now = Number((await pub.getBlock()).timestamp);
 const day = 86400;
 const organizer = { name: "Konrad Gnat", bio: "Builder, Argo founder, runs AI Power Users classes.", link: "https://x.com/konradgnat" };
 
-const cities = [
+// --------------------------------------------------------------------- launch a city
+const city = await host.call("/api/cities", {
+  method: "POST",
+  json: {
+    name: "Edge City Goa",
+    location: "Anjuna, North Goa, India",
+    mission: "Three weeks to ship something real, with people who make things.",
+    description: "A pop-up city for founders, engineers and artists who want focus and good company. Deep work in the mornings, surfing or the market in the afternoons, demos over dinner.",
+    startTime: now + 30 * day,
+    endTime: now + 51 * day,
+  },
+});
+console.log(`\u2713 City launched: ${BASE}/cities/${city.slug}`);
+
+// --------------------------------------------------------------------- add core team
+await host.call(`/api/cities/${city.slug}/team`, { address: alice.account.address });
+console.log("\u2713 Alice added to core team");
+
+// --------------------------------------------------------------------- propose residencies
+const residencyForms = [
   {
     name: "Builders' House Goa",
     location: "Anjuna, North Goa, India",
     propertyUrl: "https://www.airbnb.com/",
     mission: "Three weeks to ship something real, with people who make things.",
-    description:
-      "A hacker house in a villa near Anjuna beach during Edge City Goa. Deep work in the mornings, surfing or the market in the afternoons, demos over dinner. Fast fibre, a shared kitchen and a cook three nights a week.\n\nFor founders, engineers and artists who want focus and good company.",
+    description: "A hacker house in a villa near Anjuna beach during Edge City Goa. Deep work in the mornings, surfing or the market in the afternoons, demos over dinner. Fast fibre, a shared kitchen and a cook three nights a week.",
     organizers: [organizer, { name: "Co-host TBD", bio: "", link: "" }],
     rooms: [
       { name: "Garden dorm", type: "shared", beds: [{ label: "Bunk 1", price: "650" }, { label: "Bunk 2", price: "650" }, { label: "Bunk 3", price: "650" }, { label: "Bunk 4", price: "650" }] },
@@ -77,11 +95,12 @@ const cities = [
       { name: "Courtyard room", type: "private", beds: [{ label: "Queen bed", price: "1100" }] },
       { name: "Loft", type: "shared", beds: [{ label: "Twin A", price: "850" }, { label: "Twin B", price: "850" }] },
     ],
-    startTime: now + 30 * day,
-    endTime: now + 51 * day,
+    startTime: now + 30 * day + 1,
+    endTime: now + 51 * day - 1,
     deadline: now + 14 * day,
     minSeats: 5,
     maxSeats: 8,
+    series: { newSeries: { name: "Builders' House", description: "A recurring builder residency at Edge City" } },
   },
   {
     name: "Chiang Mai AI Residency",
@@ -99,6 +118,7 @@ const cities = [
     deadline: now + 30 * day,
     minSeats: 3,
     maxSeats: 5,
+    series: { newSeries: { name: "AI Residency", description: "Building agents in great cities" } },
   },
   {
     name: "Lisbon Network State Week",
@@ -113,40 +133,65 @@ const cities = [
     deadline: now + 10 * day,
     minSeats: 2,
     maxSeats: 4,
+    series: { newSeries: { name: "Network State Week", description: "Short, intense pop-up governance" } },
   },
 ];
 
-const created = [];
-for (const form of cities) {
-  const prep = await host.call("/api/cities/prepare", form);
-  const p = prep.params;
-  const receipt = await host.tx({
-    address: env.NEXT_PUBLIC_FACTORY_ADDRESS,
-    abi: factoryAbi,
-    functionName: "createCity",
-    args: [{ metadataHash: prep.metadataHash, startTime: BigInt(p.startTime), endTime: BigInt(p.endTime), deadline: BigInt(p.deadline), minSeats: p.minSeats, maxSeats: p.maxSeats }],
-  });
-  const { address } = await host.call("/api/cities", { txHash: receipt.transactionHash, metadataJson: prep.metadataJson });
-  created.push(address);
-  console.log(`✓ ${form.name} → ${BASE}/c/${address}`);
+const proposals = [];
+for (const form of residencyForms) {
+  const { proposal } = await host.call(`/api/cities/${city.slug}/proposals`, form);
+  proposals.push(proposal);
+  console.log(`\u2713 ${form.name} proposed -> /proposals/${proposal.id}`);
 }
 
-// Goa: alice approved for the sea-view room (bed id 5), bob pending.
-const goa = created[0];
-await alice.call(`/api/cities/${goa}/apply`, {
+// --------------------------------------------------------------------- approve the first proposal + deploy it
+const approve = await host.call(`/api/proposals/${proposals[0].id}`, { decision: "approve", note: "Let's go!" });
+const receipt = await host.tx({
+  address: env.NEXT_PUBLIC_FACTORY_ADDRESS,
+  abi: factoryAbi,
+  functionName: "createResidency",
+  args: [{
+    metadataHash: approve.proposal.metadataHash,
+    startTime: BigInt(approve.proposal.params.startTime),
+    endTime: BigInt(approve.proposal.params.endTime),
+    deadline: BigInt(approve.proposal.params.deadline),
+    minSeats: approve.proposal.params.minSeats,
+    maxSeats: approve.proposal.params.maxSeats,
+  }],
+});
+const { address: residencyAddr } = await host.call("/api/residencies", {
+  method: "POST",
+  json: { txHash: receipt.transactionHash, proposalId: proposals[0].id },
+});
+console.log(`\u2713 Builders' House Goa deployed -> ${BASE}/r/${residencyAddr}`);
+
+// --------------------------------------------------------------------- alice applies, host approves
+await alice.call(`/api/residencies/${residencyAddr}/apply`, {
   name: "Alice Tanaka",
   bio: "I build soft robotic grippers and run a small hardware lab in Osaka. Looking for co-founders.",
   links: ["https://x.com/alice", "https://github.com/alice"],
   preferredBedId: 5,
 });
-await bob.call(`/api/cities/${goa}/apply`, {
+await bob.call(`/api/residencies/${residencyAddr}/apply`, {
   name: "Bob Okafor",
   bio: "Zero-knowledge researcher. Will bring a guitar and cook jollof rice.",
   links: ["https://bob.dev"],
   preferredBedId: 1,
 });
-const { applications } = await host.call(`/api/cities/${goa}/applications`);
+const { applications } = await host.call(`/api/residencies/${residencyAddr}/applications`);
 const aliceApp = applications.find((a) => a.applicant === alice.account.address.toLowerCase());
-const approve = await host.tx({ address: goa, abi: cityAbi, functionName: "approve", args: [alice.account.address, 5, 1_400_000_000n] });
-await host.call(`/api/cities/${goa}/applications/${aliceApp.id}`, { action: "approved", txHash: approve.transactionHash });
-console.log("✓ Goa: alice approved for the sea-view room (1,400 USDC), bob pending");
+const approveTx = await host.tx({ address: residencyAddr, abi: residencyAbi, functionName: "approve", args: [alice.account.address, 5, 1_400_000_000n] });
+await host.call(`/api/residencies/${residencyAddr}/applications/${aliceApp.id}`, { action: "approved", txHash: approveTx.transactionHash });
+console.log("\u2713 Alice approved for the sea-view room (1,400 USDC), bob pending");
+
+// --------------------------------------------------------------------- create profiles
+for (const [u, name, bio] of [
+  [host, "Konrad Gnat", "Founder of Argo. Building AI City."],
+  [alice, "Alice Tanaka", "Soft robotics engineer. Hardware lab in Osaka."],
+  [bob, "Bob Okafor", "ZK researcher. Brings a guitar."],
+]) {
+  await u.call("/api/profiles/me", { method: "PUT", json: { name, bio, links: [], listed: true } });
+}
+console.log("\u2713 Profiles created for host, alice and bob");
+
+console.log(`\nDone. Open ${BASE}/cities/${city.slug} in the browser.`);
