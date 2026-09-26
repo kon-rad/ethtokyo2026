@@ -1,10 +1,11 @@
-import { mainnet, anvil, type Chain } from "viem/chains";
+import { mainnet, anvil, sepolia, type Chain } from "viem/chains";
 import type { Address } from "viem";
 
 /** Public (browser-safe) configuration. Everything here ends up in the client bundle. */
 const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? mainnet.id);
 
-export const chain: Chain = chainId === anvil.id ? anvil : mainnet;
+export const chain: Chain =
+  chainId === anvil.id ? anvil : chainId === sepolia.id ? sepolia : mainnet;
 
 export const config = {
   chain,
