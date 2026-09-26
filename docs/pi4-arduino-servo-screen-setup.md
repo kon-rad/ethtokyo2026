@@ -317,24 +317,63 @@ Only one program can hold `/dev/ttyACM0`. Stop the service (`sudo systemctl stop
 
 ## 6b. No USB-B cable: skip the Arduino, drive from GPIO
 
-If there's no USB-A to USB-B cable, wire the bar and servo to the free pins 27–40 and use [`web/hardware/pi4/pi4-gpio-board.py`](../web/hardware/pi4/pi4-gpio-board.py) instead of the orchestrator. The Pi's 5 V pins are under the screen, so the servo gets 5 V from the breadboard power module (fed from a spare USB-A port on the power bank over a USB-A to USB-A cable, or a 9 V battery into its DC jack).
+If there's no USB-A to USB-B cable, wire the I2C LCD and servo to the Pi's free pins and use [`web/hardware/pi4/pi4-gpio-board.py`](../web/hardware/pi4/pi4-gpio-board.py) instead of the orchestrator. The Pi's 5 V pins are under the screen, so the servo gets 5 V from the breadboard power module (fed from a spare USB-A port on the power bank over a USB-A to USB-A cable, or a 9 V battery into its DC jack).
+
+### Which display — I2C LCD, not an LED bar
+
+This path uses a **16x2 I2C LCD** (QAPASS HW-061 with PCF8574 backpack) instead of a 10-segment LED bar. It's 4 wires vs 10, shows "Seats: 5" as readable text with a progress bar on row 2, and leaves GPIO free for other things. The code auto-probes the I2C address, so no `i2cdetect` guesswork.
+
+### Wiring
+
+Pins 39/40 are at the USB-port end of the Pi header. Odd-numbered pins are on the inner row, even-numbered on the outer edge. The I2C pins (3/5) are at the other end, nearest the SD card — still accessible since the screen covers only 1–26.
 
 | From | To |
 |---|---|
-| Pi pins 29, 31, 33, 35, 37, 36, 38, 40 (GPIO 5, 6, 13, 19, 26, 16, 20, 21) | LED bar segments 1–8, anode side. Each cathode → resistor → − rail |
+| Pi pin 3 (GPIO2, SDA) | LCD backpack SDA |
+| Pi pin 5 (GPIO3, SCL) | LCD backpack SCL |
+| Pi pin 6 (GND) | LCD backpack GND |
+| Pi pin 1 (3.3 V) | LCD backpack VCC. **Not 5 V** — the backpack has its own regulator |
 | Pi pin 32 (GPIO12) | Servo orange (signal) |
 | Power module + rail (5 V) | Servo red. **Never to a Pi pin** |
 | Power module − rail | Servo brown, and Pi pin 34 (shared ground) |
 
-The LED bar straddles the breadboard's centre channel like a chip. Pins 39/40 are at the USB-port end of the header; odd pins are on the inner row, even pins on the board edge.
+**Check before powering on:** nothing from the power module's + rail goes to the Pi. Ground is shared, power is separate.
+
+### Install the I2C LCD library
+
+On the Pi:
+
+```bash
+sudo apt install -y python3-smbus i2c-tools
+sudo pip3 install RPLCD
+# Enable I2C on the Pi if not already:
+sudo raspi-config nonint do_i2c 0
+# Verify the LCD appears:
+sudo i2cdetect -y 1
+```
+
+You should see `0x27` or `0x3f` in the output. The program auto-detects it, so either works.
+
+### Test
 
 ```bash
 scp web/hardware/pi4/pi4-gpio-board.py konradgnat@secondBrain.local:~/
-python3 ~/pi4-gpio-board.py test      # bar counts 0-8, latch opens and closes
-python3 ~/pi4-gpio-board.py run       # needs RESIDENCY_ADDRESS, RPC_URL, cast on PATH
+python3 ~/pi4-gpio-board.py test
 ```
 
-It uses the system Python (`gpiozero` ships with Raspberry Pi OS). For boot, use the unit in 6.3 with `ExecStart=/usr/bin/python3 /home/konradgnat/pi4-gpio-board.py run`.
+The LCD shows "TEST: bar sweep", counts 0-8, then "TEST: latch open", swings the servo to 90°, closes it, and shows "All good!".
+
+### Run (live chain)
+
+```bash
+RESIDENCY_ADDRESS=0x... RPC_URL=https://ethereum-sepolia-rpc.publicnode.com python3 ~/pi4-gpio-board.py run
+```
+
+The LCD shows "Seats: N/8" on row 1 with a progress bar on row 2, plus the status word on the right. Needs Foundry's `cast` on the Pi (step 6.1).
+
+### Boot service
+
+Same unit file as 6.3, but with `ExecStart=/usr/bin/python3 /home/konradgnat/pi4-gpio-board.py run` and the I2C libraries already installed.
 
 ---
 
@@ -346,7 +385,8 @@ It uses the system Python (`gpiozero` ships with Raspberry Pi OS). For boot, use
 | Screen | Board fills the 3.5" display in landscape after a cold boot, with no cursor |
 | Arduino | `/dev/serial/by-id/usb-Arduino…` present; `miniterm` `S` answers |
 | Orchestrator | `journalctl -u seat-key` shows seat count and status every 5 s |
-| LED bar | Matches `seatCount()` (capped at 9) within 5 s of a stake |
+| LCD (Arduino path) | Matches `seatCount()` (capped at 9) within 5 s of a stake |
+| LCD (GPIO path) | Shows "Seats: N/8" with a progress bar, updating every 5 s |
 | Latch | Locked at rest; opens on a manual `O` |
 
 ---
@@ -355,7 +395,11 @@ It uses the system Python (`gpiozero` ships with Raspberry Pi OS). For boot, use
 
 | Problem | Likely cause | Fix |
 |---|---|---|
-| LED bar is blank for the first 5 s after the service starts | The Uno resets when the port opens and misses the first digit | Normal. The next poll sets it |
+| LCD is blank | I2C address isn't 0x27 | Run `sudo i2cdetect -y 1`. Edit `I2C_ADDR` in the script or let auto-detect find it (it also tries 0x3f) |
+| LCD shows garbled characters | Wrong I2C address or 5 V on VCC | Check wiring. The backpack runs on 3.3 V |
+| LCD flickers or dims | Shared ground missing or loose | Ensure the LCD's GND and Pi's GND (pin 6) are connected |
+| `ModuleNotFoundError: RPLCD` | Library not installed | `sudo pip3 install RPLCD` |
+| `No I2C LCD found` | I2C disabled or wrong wiring | `sudo raspi-config nonint do_i2c 0` then `sudo i2cdetect -y 1` to confirm |
 | `[serial] /dev/ttyACM0: … Permission denied` | User not in `dialout` | `sudo usermod -aG dialout konradgnat`, reboot |
 | `[serial] … Device or resource busy` | `miniterm` or the service already has the port | Close one of them |
 | `ModuleNotFoundError: serial_asyncio` | Script run with system Python | Use `~/aicity-venv/bin/python` |
@@ -388,6 +432,6 @@ Follow [`pi-zero-seat-key-guide.md`](pi-zero-seat-key-guide.md) sections 1 and 4
 
 **Open questions:**
 - Pi 4 RAM size (it affects how comfortably Chromium runs next to the orchestrator).
-- Whether to put the seat count on the I2C 16×2 LCD too, as a second display on the Uno's A4/A5.
+- Whether the 3.5" screen physically blocks pins 3 and 5 (the I2C pins) — if so, use software I2C on GPIO0/GPIO1 (pins 27/28).
 
 Related: [`hardware-integrations.md`](hardware-integrations.md) · [`pi-status-board-setup.md`](pi-status-board-setup.md) · [`pi-zero-seat-key-guide.md`](pi-zero-seat-key-guide.md)

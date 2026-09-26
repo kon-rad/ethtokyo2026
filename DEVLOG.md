@@ -23,7 +23,7 @@ This is the internal log. The public build journal at `/devlog` (`web/app/devlog
 ---
 
 ## 2026-09-27 — aicity.cyou domain + HTTPS
-**Commit:** uncommitted (server config only; this entry)
+**Commit:** `42dfbb2` (server config; this entry)
 
 - DNS at Namecheap (BasicDNS): `A @` and `A www` → the droplet. Nginx `ai-city.conf` now serves `aicity.cyou` and `www.aicity.cyou` only; the bare IP no longer serves AI City.
 - Let's Encrypt certificate via `certbot --nginx --redirect` (both names, expires 2026-12-25, renewed by `certbot.timer`). HTTP redirects to HTTPS.

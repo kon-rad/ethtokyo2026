@@ -236,7 +236,7 @@ function ActionPanel({
   if (member?.staked)
     return (
       <Notice tone="success">
-        You&apos;re in ✓ {myBedLabel && <>· {myBedLabel}</>} · paid {formatUsdc(member.price)} USDC
+        You're in ✓ {myBedLabel && <>· {myBedLabel}</>} · paid {formatUsdc(member.price)} USDC
         {member.claimed && " · claimed"}
       </Notice>
     );
@@ -250,7 +250,7 @@ function ActionPanel({
     return (
       <div className="space-y-3">
         <Notice tone="success">
-          You&apos;re approved{myBedLabel ? ` for ${myBedLabel}` : ""}. Pay {formatUsdc(price)} USDC to hold your bed.
+          You're approved{myBedLabel ? ` for ${myBedLabel}` : ""}. Pay {formatUsdc(price)} USDC to hold your bed.
         </Notice>
         <p className="text-xs text-muted">
           Refunded in full if fewer than {residency.minSeats} people pay by the deadline, or if the host cancels.
@@ -300,12 +300,21 @@ function ActionPanel({
     );
   if (a?.status === "approved")
     return <Notice tone="info">Approved: waiting for the approval transaction to confirm…</Notice>;
-  if (a?.status === "denied") return <Notice tone="error">The host didn&apos;t approve this application.</Notice>;
+  if (a?.status === "denied") return <Notice tone="error">The host didn't approve this application.</Notice>;
 
   return (
-    <LinkButton href={`/r/${address}/apply`} className="w-full">
-      Apply to join
-    </LinkButton>
+    <div className="space-y-4">
+      <LinkButton href={`/r/${address}/apply`} className="w-full">
+        Apply to join
+      </LinkButton>
+      <Card className="p-4">
+        <h3 className="font-semibold">Pair seat key</h3>
+        <p className="text-sm text-muted mb-3">Use a Zero device to unlock the door for this residency</p>
+        <Button variant="secondary" className="w-full">
+          Pair seat key
+        </Button>
+      </Card>
+    </div>
   );
 }
 
