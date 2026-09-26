@@ -15,6 +15,15 @@ export function Footer() {
           <Link href="/#how" className="hover:text-foreground">
             How it works
           </Link>
+          <Link href="/docs" className="hover:text-foreground">
+            Docs
+          </Link>
+          <Link href="/devlog" className="hover:text-foreground">
+            Devlog
+          </Link>
+          <Link href="/blog" className="hover:text-foreground">
+            Blog
+          </Link>
           <Link href="/people" className="hover:text-foreground">
             Directory
           </Link>

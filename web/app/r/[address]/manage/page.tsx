@@ -15,6 +15,7 @@ import type { ResidencyDto } from "@/lib/server/residencies";
 import { statusTone } from "@/components/residency-card";
 import { useSession } from "@/components/session";
 import { Button, Card, Field, Input, Notice, Pill, Select } from "@/components/ui";
+import { KnowledgeManager } from "@/components/knowledge-manager";
 
 type AppRow = {
   id: number;
@@ -89,6 +90,16 @@ function Manage({ residency }: { residency: ResidencyDto }) {
 
       {chain.status === "Active" && <Withdraw residency={residency} balance={chain.balance} onDone={refresh} />}
       <Lifecycle residency={residency} status={chain.status} onDone={refresh} />
+
+      <section className="space-y-4 pt-4">
+        <KnowledgeManager
+          scope="residency"
+          slugOrAddress={residency.address}
+          sharedFiles={[
+            { filename: "argo-journal", label: "Argo journal — learnings.md" },
+          ]}
+        />
+      </section>
     </div>
   );
 }

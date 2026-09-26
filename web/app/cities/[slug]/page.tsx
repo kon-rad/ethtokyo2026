@@ -10,6 +10,7 @@ import { Avatar, PersonLink } from "@/components/person";
 import { ResidencyGrid } from "@/components/residency-grid";
 import { LocalDate } from "@/components/countdown";
 import { LinkButton, Notice, Card, Pill } from "@/components/ui";
+import { ConciergePanel } from "@/components/concierge-panel";
 import type { CityDto } from "@/lib/server/cities";
 import type { ProposalDto } from "@/lib/server/proposals";
 
@@ -111,6 +112,8 @@ export default function CityPage({ params }: PageProps<"/cities/[slug]">) {
           </Card>
         </aside>
       </div>
+
+      <ConciergePanel scope="city" slugOrAddress={slug} name={city.name} />
     </div>
   );
 }

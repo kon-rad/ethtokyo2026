@@ -8,6 +8,7 @@ import { useSession } from "@/components/session";
 import { Button, Card, Field, Input, Notice, Pill } from "@/components/ui";
 import { Avatar, PersonLink } from "@/components/person";
 import { LinkButton } from "@/components/ui";
+import { KnowledgeManager } from "@/components/knowledge-manager";
 import type { CityDto } from "@/lib/server/cities";
 
 export default function ManageCityPage({ params }: PageProps<"/cities/[slug]/manage">) {
@@ -43,6 +44,16 @@ export default function ManageCityPage({ params }: PageProps<"/cities/[slug]/man
       <EditCityForm city={city} myRole={myRole} onDone={refetch} />
 
       {myRole === "founder" && <CoreTeamSection city={city} onDone={refetch} />}
+
+      <section className="space-y-4 pt-4">
+        <KnowledgeManager
+          scope="city"
+          slugOrAddress={slug}
+          sharedFiles={[
+            { filename: "argo-journal", label: "Argo journal — learnings.md" },
+          ]}
+        />
+      </section>
     </div>
   );
 }

@@ -98,6 +98,7 @@ Happy path; minimum missed → refunds; cancel → refunds; max seats; bed doubl
 | `residencies` | `address` PK, `host`, `metadata_json`, `metadata_hash`, dates, seats, `created_tx`, `created_block`, `city_id`, `series_id`, `proposal_id`, `hidden`, `hidden_note` |
 | `applications` | `id`, `residency`, `applicant`, `name`, `bio`, `links` JSONB, `preferred_bed`, `status`, `bed_id`, `price_units`, `decision_tx`, timestamps |
 | `receipts` | `id`, `residency`, `tx_hash`, `receipt_hash`, `filename`, `mime`, `data` bytea |
+| `env_snapshots` | `id`, `residency_address`, `start_time`, `end_time`, `temp_avg`, `light_avg`, `door_count`, `data_hash` BYTEA, `signer` BYTEA, `signature` BYTEA, `tx_hash` BYTEA NULL, `created_at` |
 
 **Residency metadata JSON (hashed onchain):** `version`, `cityId` (slug), `seriesId` (slug), `proposalId`, `name`, `location`, `description`, `mission`, `propertyUrl`, `organizers[] {name, bio, link}`, `rooms[] {name, type: private|shared, beds[] {id, label, price}}`. Prices are in USDC.
 
@@ -126,6 +127,9 @@ Happy path; minimum missed → refunds; cancel → refunds; max seats; bed doubl
 | `POST /api/residencies/[address]/applications/[id]` | host | Deny or confirm approval |
 | `POST /api/residencies/[address]/receipts` | host | Upload receipt file after withdrawal |
 | `GET /api/residencies/[address]/receipts[/id]` | host or staker | List and download receipts |
+| `GET /api/residencies/[address]/environment` | — | Latest house environment snapshot (temperature, light, door events) |
+| `POST /api/residencies/[address]/environment/snapshot` | host or device key | Submit a signed hourly environment snapshot |
+| `GET /api/residencies/[address]/environment/snapshot/latest` | — | Latest signed snapshot with full EIP-712 verification data |
 | `GET /api/directory` | — | Paginated public directory with search + city filter |
 | `GET/PUT /api/profiles/me` | session/verified | Read/update own profile |
 | `GET /api/profiles/[address]` | — | Public profile with participation |

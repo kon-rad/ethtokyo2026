@@ -69,7 +69,7 @@ function AuthLayer({ children }: { children: React.ReactNode }) {
     <RainbowKitAuthenticationProvider adapter={adapter} status={status}>
       <RainbowKitProvider
         initialChain={config.chain}
-        theme={lightTheme({ accentColor: "#111827", borderRadius: "large", fontStack: "system" })}
+        theme={lightTheme({ accentColor: "#111827", borderRadius: "medium", fontStack: "system" })}
       >
         {children}
       </RainbowKitProvider>

@@ -26,9 +26,12 @@ function user(key) {
   const account = privateKeyToAccount(key);
   const wallet = createWalletClient({ account, chain: anvil, transport: http() });
   const cookies = new Map();
-  const call = async (path, body) => {
+  // call(path) → GET; call(path, body) → POST body; call(path, { method, json }) → that method + json.
+  const call = async (path, arg) => {
+    const explicit = arg && typeof arg === "object" && "method" in arg && "json" in arg;
+    const body = explicit ? arg.json : arg;
     const res = await fetch(BASE + path, {
-      method: body ? "POST" : "GET",
+      method: explicit ? arg.method : body ? "POST" : "GET",
       headers: { "content-type": "application/json", cookie: [...cookies].map(([k, v]) => `${k}=${v}`).join("; ") },
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -113,9 +116,9 @@ const residencyForms = [
       { name: "Private rooms", type: "private", beds: [{ label: "Room 1", price: "900" }, { label: "Room 2", price: "900" }, { label: "Room 3", price: "900" }] },
       { name: "Shared room", type: "shared", beds: [{ label: "Bed A", price: "550" }, { label: "Bed B", price: "550" }] },
     ],
-    startTime: now + 45 * day,
-    endTime: now + 75 * day,
-    deadline: now + 30 * day,
+    startTime: now + 31 * day,
+    endTime: now + 50 * day,
+    deadline: now + 20 * day,
     minSeats: 3,
     maxSeats: 5,
     series: { newSeries: { name: "AI Residency", description: "Building agents in great cities" } },
@@ -128,9 +131,9 @@ const residencyForms = [
     description: "A short, intense week: talks in the mornings, building in the afternoons, fado at night.",
     organizers: [organizer],
     rooms: [{ name: "Apartment", type: "shared", beds: [{ label: "Bed 1", price: "400" }, { label: "Bed 2", price: "400" }, { label: "Bed 3", price: "400" }, { label: "Bed 4", price: "400" }] }],
-    startTime: now + 20 * day,
-    endTime: now + 27 * day,
-    deadline: now + 10 * day,
+    startTime: now + 33 * day,
+    endTime: now + 40 * day,
+    deadline: now + 18 * day,
     minSeats: 2,
     maxSeats: 4,
     series: { newSeries: { name: "Network State Week", description: "Short, intense pop-up governance" } },

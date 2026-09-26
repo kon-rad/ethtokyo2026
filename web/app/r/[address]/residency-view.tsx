@@ -19,6 +19,7 @@ import { Cover, statusTone } from "@/components/residency-card";
 import { Countdown, LocalDate } from "@/components/countdown";
 import { useSession } from "@/components/session";
 import { Button, Card, LinkButton, Notice, Pill, SeatsBar } from "@/components/ui";
+import { ConciergePanel } from "@/components/concierge-panel";
 
 type Application = { id: number; status: "pending" | "approved" | "denied" } | null;
 type ReceiptRow = { id: number; tx_hash: string; filename: string };
@@ -157,6 +158,8 @@ export function ResidencyView({ residency }: { residency: ResidencyDto }) {
           </p>
         </aside>
       </div>
+
+      <ConciergePanel scope="residency" slugOrAddress={address} name={m.name || "Residency"} />
     </div>
   );
 }

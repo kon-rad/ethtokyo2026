@@ -21,6 +21,8 @@ Luma for pop-up cities. Anyone can launch a city (a place and a time window, off
 | | Withdraw | Receipt file stored, sha256 checked against the event | `withdraw(amount, receiptHash, note)` |
 | | Close / claim | — | `close()` → pro-rata leftovers; `claim()` |
 
+**Agents:** people's agents can do everything the UI does. Point them at `/skill.md` ([`web/public/skill.md`](web/public/skill.md)), which indexes per-task skills in `web/public/skills/`: auth, directory, launch-city, launch-residency, apply-residency, knowledge.
+
 Architecture and design: [`docs/architecture-plan.md`](docs/architecture-plan.md). Security notes: [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Repo
@@ -71,6 +73,10 @@ After changing a contract: `forge build && node web/scripts/gen-abi.mjs`.
 | Path | Description |
 |---|---|
 | `/` | Home: mission, residencies, cities, people |
+| `/docs` | Self-hosted documentation: concepts, guides, architecture, extropian vision |
+| `/devlog` | Build journal: what was shipped, what broke, what comes next |
+| `/blog` | Blog index |
+| `/blog/infomorph-extropianism` | Infomorphs and Extropianism — the full vision post |
 | `/launch` | Launch a pop-up city |
 | `/cities` | Browse pop-up cities |
 | `/cities/[slug]` | City detail + its residencies + proposals (core team) |
