@@ -10,6 +10,12 @@ export function Footer() {
           <p className="font-medium text-foreground">AI City</p>
           <p>Pop-up cities made of residencies. Payments in USDC on Ethereum.</p>
           <p className="text-xs">Unaudited software. Only deposit what you can afford to lose.</p>
+          <p className="text-xs">
+            A Konrad Gnat production · Founder,{" "}
+            <a href="https://myargoquest.com" target="_blank" rel="noreferrer" className="underline hover:text-foreground">
+              Argo
+            </a>
+          </p>
         </div>
         <div className="flex flex-wrap gap-4">
           <Link href="/#how" className="hover:text-foreground">

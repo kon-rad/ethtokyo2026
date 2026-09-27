@@ -8,6 +8,14 @@ export const metadata: Metadata = {
 
 const posts = [
   {
+    href: "/blog/argo-journal-concierge",
+    title: "Your private journal as a matchmaker",
+    description:
+      "Link Argo, your private AI journal, to your profile. The concierge asks it a few questions, you answer or decline each in Argo, and it introduces you to a co-founder, a partner or an opportunity in your residency and city.",
+    date: "2026-09-27",
+    tags: ["argo", "concierge", "privacy"],
+  },
+  {
     href: "/blog/ai-city-app",
     title: "AI City: A coordination primitive for the network state",
     description:

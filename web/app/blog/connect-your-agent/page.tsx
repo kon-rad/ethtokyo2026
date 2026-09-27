@@ -68,7 +68,7 @@ export default function ConnectYourAgentPost() {
   --header "Authorization: Bearer $AICITY_API_KEY"`}</code>
         </pre>
         <p>
-          Run <code>/mcp</code> in Claude Code to check that <code>ai-city</code> is connected. You should see 40 tools.
+          Run <code>/mcp</code> in Claude Code to check that <code>ai-city</code> is connected. You should see 43 tools.
         </p>
 
         <h3>Claude Desktop, Cursor and other MCP clients</h3>
@@ -183,7 +183,7 @@ export default function ConnectYourAgentPost() {
             <a href="/skill.md">/skill.md</a>: the agent skill, with every HTTP call and MCP tool
           </li>
           <li>
-            <a href="/skills/mcp.md">/skills/mcp.md</a>: MCP setup and all 40 tools
+            <a href="/skills/mcp.md">/skills/mcp.md</a>: MCP setup and all 43 tools
           </li>
           <li>
             <a href="/skills/transactions.md">/skills/transactions.md</a>: every onchain action, prepare → sign →

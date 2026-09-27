@@ -51,6 +51,15 @@ const sections = [
     ],
   },
   {
+    id: "concierge-section",
+    title: "Concierge and Argo",
+    items: [
+      { id: "concierge", title: "AI concierge" },
+      { id: "knowledge-bases", title: "Knowledge bases" },
+      { id: "argo-journal", title: "Link your Argo journal" },
+    ],
+  },
+  {
     id: "architecture",
     title: "Architecture",
     items: [
@@ -422,7 +431,7 @@ export default function DocsPage() {
 
             <h3 id="mcp-tools">MCP tools</h3>
             <p>
-              40 tools. <em>Key</em> means any valid API key. <em>Verified</em> means the key&apos;s wallet has passed World
+              43 tools. <em>Key</em> means any valid API key. <em>Verified</em> means the key&apos;s wallet has passed World
               ID and is 18+. A role (core team, host, proposer) means the wallet must hold it.
             </p>
             <table>
@@ -577,6 +586,24 @@ export default function DocsPage() {
                   <td>Edit the knowledge base</td>
                   <td>Founder / Host</td>
                 </tr>
+                <tr>
+                  <td colSpan={3} className="pt-4 font-semibold">Argo private journal</td>
+                </tr>
+                <tr>
+                  <td><code>link_argo_journal</code></td>
+                  <td>Link your Argo @username or wallet</td>
+                  <td>Verified</td>
+                </tr>
+                <tr>
+                  <td><code>ask_my_argo_journal</code></td>
+                  <td>Have a concierge send questions to your Argo journal</td>
+                  <td>Verified</td>
+                </tr>
+                <tr>
+                  <td><code>list_my_argo_requests</code></td>
+                  <td>Your requests and the answers you approved</td>
+                  <td>Key</td>
+                </tr>
               </tbody>
             </table>
 
@@ -632,6 +659,123 @@ export default function DocsPage() {
           </section>
 
           {/* ==================== Architecture ==================== */}
+          {/* ==================== Concierge and Argo ==================== */}
+          <section id="concierge-section">
+            <h2 className="text-2xl font-semibold tracking-tight">Concierge and Argo</h2>
+
+            <h3 id="concierge">AI concierge</h3>
+            <p>
+              Every city and every residency has an <strong>AI concierge</strong>: the chat bubble on the city page and
+              the residency page. It answers from that place&apos;s knowledge base and live listing: arrival and
+              check-in, house rules, beds and prices, the local guide, who&apos;s coming. When a detail matters, it
+              quotes the file it came from.
+            </p>
+
+            <h3 id="knowledge-bases">Knowledge bases</h3>
+            <p>
+              Each city and each residency has its own knowledge base. The city&apos;s founder edits the city&apos;s
+              files and the residency&apos;s host edits the residency&apos;s, either as markdown written in the app or
+              as PDF and Word uploads, whose text is extracted so it can be searched.
+            </p>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line">
+                  <th className="py-2 text-left font-medium">Concierge</th>
+                  <th className="py-2 text-left font-medium">Reads</th>
+                  <th className="py-2 text-left font-medium">Edited by</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-line">
+                  <td className="py-2 font-medium">City</td>
+                  <td className="py-2">The city&apos;s listing and files</td>
+                  <td className="py-2">The city&apos;s founder</td>
+                </tr>
+                <tr className="border-b border-line">
+                  <td className="py-2 font-medium">Residency</td>
+                  <td className="py-2">
+                    The residency&apos;s listing and files <strong>plus all of its city&apos;s files</strong>
+                  </td>
+                  <td className="py-2">The residency&apos;s host</td>
+                </tr>
+              </tbody>
+            </table>
+            <p>
+              <strong>Your agent can read them too.</strong> Connect it to the <a href="#mcp">MCP server</a> with an API
+              key and it gets <code>list_knowledge</code>, <code>read_knowledge_file</code>,{" "}
+              <code>search_knowledge</code> and <code>ask_concierge</code>. Founders and hosts also get{" "}
+              <code>write_knowledge_file</code>, <code>upload_knowledge_file</code> and{" "}
+              <code>delete_knowledge_file</code>. The HTTP equivalents are in{" "}
+              <a href="/skills/knowledge.md">/skills/knowledge.md</a>.
+            </p>
+
+            <h3 id="argo-journal">Link your Argo journal</h3>
+            <p>
+              <a href="https://myargoquest.com">Argo</a> is a private, end-to-end encrypted AI journal. Link it on your
+              AI City profile and a concierge can ask your journal specific questions. You answer or decline each one in
+              Argo, and the concierge uses the approved answers to connect you with people in your residency and your
+              city: a new co-founder, a new business partner, a new business opportunity, a trade, or a topic worth
+              discussing.
+            </p>
+            <ol>
+              <li>
+                <strong>Link.</strong> On <Link href="/me">your profile</Link>, under <em>Argo private journal</em>, enter
+                your Argo <code>@username</code> (Argo → Settings → Username) or the wallet address in Argo. You need to
+                be World ID verified. Nothing is shared when you link.
+              </li>
+              <li>
+                <strong>Ask.</strong> Open a city&apos;s or residency&apos;s concierge and press{" "}
+                <strong>Ask my Argo journal</strong>. The concierge signs an{" "}
+                <a href="https://myargoquest.com/agents">Argo information request</a> with its own key and sends four
+                questions: what you&apos;re building, who you want to meet, what you can offer, and what you&apos;d like
+                to talk about.
+              </li>
+              <li>
+                <strong>Answer in Argo.</strong> The questions arrive in Argo&apos;s Inbox. Argo drafts answers from your
+                journal on your phone; you edit, decline or send each one. Only what you send leaves Argo.
+              </li>
+              <li>
+                <strong>Match.</strong> Argo delivers your answers to AI City, signed with its server key, and AI City
+                checks that signature. The concierge reads them as member notes. Ask it &quot;who should I meet?&quot; and
+                it suggests introductions and says why.
+              </li>
+            </ol>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line">
+                  <th className="py-2 text-left font-medium">The concierge sees</th>
+                  <th className="py-2 text-left font-medium">The concierge never sees</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-line">
+                  <td className="py-2">Answers you sent, to questions you were shown</td>
+                  <td className="py-2">Your journal entries</td>
+                </tr>
+                <tr className="border-b border-line">
+                  <td className="py-2">Your Argo @username or address</td>
+                  <td className="py-2">Your Argo keys or recovery code</td>
+                </tr>
+              </tbody>
+            </table>
+            <p>
+              The concierge chat is public, so anyone can ask it about the answers you sent. Your profile lists every
+              request with its answers. <strong>Remove from concierge</strong> deletes one, and <strong>Unlink</strong>{" "}
+              deletes them all. Argo accepts up to 3 requests a day from the concierge to one person.
+            </p>
+            <p>
+              <strong>Agents:</strong> <code>link_argo_journal</code>, <code>ask_my_argo_journal</code> and{" "}
+              <code>list_my_argo_requests</code> over MCP, or <code>PUT /api/argo/link</code>,{" "}
+              <code>POST /api/argo/requests</code> <code>{"{ scope, key, questions? }"}</code> and{" "}
+              <code>GET /api/argo/requests</code> over HTTP.
+            </p>
+            <p>
+              <Link href="/blog/argo-journal-concierge" className="underline">
+                Read the blog post: your private journal as a matchmaker →
+              </Link>
+            </p>
+          </section>
+
           <section id="architecture">
             <h2 className="text-2xl font-semibold tracking-tight">Architecture</h2>
 

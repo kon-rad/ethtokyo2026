@@ -86,6 +86,34 @@ export default function Home() {
         />
       </section>
 
+      <section className="grid gap-6 rounded-2xl border border-line bg-surface p-6 sm:p-8 lg:grid-cols-2">
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-indigo-600">New · Argo</p>
+          <h2 className="text-2xl font-semibold tracking-tight">Your private journal as a matchmaker</h2>
+          <p className="text-muted">
+            Link your <a href="https://myargoquest.com" className="underline">Argo</a> private AI journal to your
+            profile. Every city and residency has an AI concierge. Press &ldquo;Ask my Argo journal&rdquo; and it sends
+            your journal a few questions. You answer or decline each one in Argo, and the concierge introduces you to
+            the right people in your residency and your city. Your journal never leaves Argo.
+          </p>
+          <div className="flex flex-wrap gap-3 pt-1">
+            <LinkButton href="/blog/argo-journal-concierge">Read how it works</LinkButton>
+            <LinkButton href="/me" variant="secondary">
+              Link Argo
+            </LinkButton>
+          </div>
+        </div>
+        <ul className="grid gap-3 self-center sm:grid-cols-2">
+          {["A new co-founder", "A new business partner", "A new business opportunity", "A trade or a topic to discuss"].map(
+            (t) => (
+              <li key={t} className="rounded-xl border border-line bg-background px-4 py-3 text-sm font-medium">
+                {t}
+              </li>
+            ),
+          )}
+        </ul>
+      </section>
+
       <section className="space-y-5">
         <div className="flex items-end justify-between gap-4">
           <div>

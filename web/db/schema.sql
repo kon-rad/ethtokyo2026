@@ -243,10 +243,42 @@ CREATE INDEX IF NOT EXISTS door_checkins_residency_idx ON door_checkins (residen
 
 -- Door status: real-time feedback for the Pi's status board. The door script (pi4-door.py)
 -- POSTs its current state (checking, opening, denied, open, locked) and the board polls it.
--- Only the latest status per residency matters; the ON CONFLICT keeps just one row.
+-- One row per residency, overwritten on each POST. started_at is when the current status
+-- began (kept while the status repeats), so the board can show how long a check has run.
 CREATE TABLE IF NOT EXISTS door_status (
   residency   TEXT PRIMARY KEY REFERENCES residencies(address),
   status      TEXT NOT NULL CHECK (status IN ('checking', 'opening', 'denied', 'open', 'locked')),
   message     TEXT NOT NULL DEFAULT '',
+  started_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE door_status ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+-- Argo private AI journal link (lib/server/argo.ts). A member links their Argo @username or wallet;
+-- the concierge then sends their Argo a signed information request (Argo's agent info-request
+-- protocol). They answer in Argo, question by question, and Argo posts the approved answers to
+-- /api/argo/webhook, signed with its pinned server key. Answers go into the concierge prompt
+-- for the city or residency the request was made from, so it can introduce people.
+CREATE TABLE IF NOT EXISTS argo_links (
+  address     TEXT PRIMARY KEY REFERENCES users(address),
+  handle      TEXT NOT NULL,                         -- '@username' or 0x address, as Argo resolves it
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS argo_requests (
+  id            TEXT PRIMARY KEY,                    -- Argo's request id: sha256 of the canonical payload
+  address       TEXT NOT NULL REFERENCES users(address),  -- the member whose journal was asked
+  handle        TEXT NOT NULL,
+  scope         TEXT NOT NULL CHECK (scope IN ('city', 'residency')),
+  scope_key     TEXT NOT NULL,                       -- city slug or lowercase residency address
+  reason        TEXT NOT NULL,
+  questions     JSONB NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'answered')),
+  answers       JSONB,                               -- [{ question, answer, declined }] from Argo
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at    TIMESTAMPTZ NOT NULL,
+  responded_at  TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS argo_requests_address_idx ON argo_requests (address, created_at DESC);
+CREATE INDEX IF NOT EXISTS argo_requests_scope_idx ON argo_requests (scope, scope_key) WHERE status = 'answered';

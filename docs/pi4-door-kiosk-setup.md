@@ -121,34 +121,44 @@ systemctl is-active aicity-door                     # active
 ## Known gaps
 
 - The board's residency `0xcafac3dd…052c` exists only on local anvil, not Sepolia, so `staked` and `active` fail with "no contract". A real Sepolia residency is needed for the chain rules.
-- Door events only show in the journal, not on the screen.
+- The first 20-40 s after plugging in are invisible to the Pi 4: the Zero's USB port stays dead until its kernel loads `g_serial`, so the banner only appears once `/dev/ttyACM0` does.
 - The Zero has no confirm button, so it signs any well-formed door challenge. The message format can't be reused as a transaction or a SIWE login.
 
-## Door status indicator (board feedback)
+## Door status banner (board feedback)
 
-The Pi 4's door script now POSTs its current state to `POST /api/residencies/[...]/door/status` as it works through a key insertion:
+`pi4-door.py` posts its state to `POST /api/residencies/<address>/door/status` from a background thread (ordered, so the latch never waits on the network). The board polls `GET` every 1.5 s and covers the screen with a banner:
 
-| Status | Meaning | Board shows |
-|---|---|---|
-| `checking` | Zero detected, waiting for PONG / verifying challenge | Amber pulsing dot + "Checking key..." |
-| `opening` | Key verified, latch moving | Green pulsing dot + "Door opening..." |
-| `open` | Latch is unlocked | Green dot + "Door open" |
-| `denied` | Key rejected (wrong wallet, wrong rule) | Red dot + "Denied: reason" |
-| `locked` | Door shut again | Nothing (status hidden) |
+| Status | Posted when | Banner | Stays up |
+|---|---|---|---|
+| `checking` | `/dev/ttyACM0` appears ("starting up"), then again on PONG ("checking its signature") | Amber, spinner, running timer | until the next status, max 330 s |
+| `opening` / `open` | Signature and rule pass | Green, "Welcome, door open" | 45 s |
+| `denied` | Rule fails, or any key error (e.g. no PONG in 300 s) | Red, with the reason | 20 s |
+| `locked` | Latch closed again | none | |
 
-The board polls this every 2 seconds via `useDoorStatus()`. It requires `DOOR_API_KEY` in both `door.env` (on the Pi 4 boot partition) and `.env.local` (on the server) as a shared secret. Without it, the board just shows "In the house" with no door indicator — no crash, no error.
+The timer runs from when the status began (`door_status.started_at`, kept while the same status repeats). While the door is open the board refetches "In the house" every second, so the check-in shows up right away.
 
-### How the Zero boot time was cut from ~3 minutes to ~60-90 seconds
+**Needs `DOOR_API_KEY`**, the same value in `door.env` on the Pi 4 and in the app's `.env.local`. Without it the door works but posts no status, and the board shows no banner.
 
-The delay came from two sources:
+## Zero boot time
 
-1. **Raspberry Pi OS boot** (30-60s): the full OS boots with services for networking, bluetooth, sound, HDMI getty, and triggerhappy — none of which the offline door Zero needs. The fix (`zero-trim.sh` or now part of `offline-card/zero-setup.sh`) disables and masks these services.
+The Zero cold-boots on every insertion, so its whole boot is door delay. Two parts:
 
-2. **Python import time** (30-60s): `eth_account` and its C-extension dependencies (`pydantic-core`, `ckzg`, `bitarray`, `cytoolz`, `pycryptodome`) are big packages. On a single-core ARMv6, importing and compiling `.pyc` from scratch takes ~30-60 seconds. The fix pre-compiles all `.py` files in the venv's `site-packages` to `.pyc` on first setup, so imports are fast on every subsequent boot.
+1. **Python.** The signer used to import `eth_account` before answering PING. On the Zero's single ARMv6 core that is tens of seconds: pydantic, plus `py_ecc` builds its BLS pairing tables at import time. On an M-series Mac the same import is 0.25 s warm and 2.5 s cold. The door path (PING, ADDR, DOOR) now uses only pycryptodome's keccak and a small secp256k1 signer inside `zero-tx-signer.py` (16 ms to import on the Mac). Its signatures are byte-identical to `eth_account.sign_message`, checked on 1,500 random keys. `eth_account` loads only for SIGN, or once to turn the mnemonic into a key, which is then cached in `/var/lib/zero-signer/derived-key` (0600, tagged with a hash of the mnemonic).
+2. **The OS.** cloud-init runs four Python stages every boot, and with no real clock the apt, man-db and e2scrub timers look overdue at every boot, so they compete with the signer for the one core. `zero-speedup.sh` masks those and the network, Bluetooth, console and ssh units. It starts the signer with `DefaultDependencies=no` (right after the disk and `/dev/ttyGS0`) and adds `cloud-init=disabled` to `cmdline.txt`.
 
-If your Zero SD card was flashed before this change, run the trim script separately:
+3. **systemd and the initramfs themselves.** Even trimmed, a full systemd boot on one ARMv6 core is a big share of what's left. So the update also boots the Zero straight into the signer. `cmdline.txt` gets `init=/opt/zero-signer/zero-fastinit.sh`, and the kernel runs that script as PID 1 in place of systemd. The script mounts `/proc` and `/sys`, sets the CPU governor to `performance` (without systemd nothing moves it off the kernel's slow default), and runs `modprobe dwc2 g_serial` since there's no udev. Then it runs the signer. The root filesystem stays read-only, so yanking the key mid-boot can't corrupt the card. If the signer fails 3 times, the script `exec`s `/sbin/init` and the Zero falls back to a normal systemd boot with `zero-tx-signer.service`. `config.txt` gets `auto_initramfs=0`, `disable_splash=1`, `boot_delay=0` and camera/display auto-detect off.
+
+**Undo fast boot from the Mac:** delete `init=/opt/zero-signer/zero-fastinit.sh` from `cmdline.txt`. If the Zero won't boot at all, copy `config.txt.bak-<time>` back over `config.txt`; `auto_initramfs=0` is the likely culprit. Re-running `zero-update-card.sh` also removes the `init=` for its one cloud-init run, and the update puts it back afterwards.
+
+PONG now reports the Zero's uptime (`PONG up=41.2 ready=39.8`), and the door logs `key awake after Ns on the port (...)`, so `journalctl -u aicity-door` shows where the time goes.
+
+**Applying it to an existing Zero card** (no network needed; the Zero never gets one):
 
 ```bash
-# From the Mac, while the Zero is still online:
-ssh <user>@zero-signer.local 'sudo bash -s' < web/hardware/pi-zero/zero-trim.sh
+# SD card from the Zero in the Mac's reader (mounts as /Volumes/bootfs)
+web/hardware/pi-zero/zero-update-card.sh /Volumes/bootfs
+# eject, card back in the Zero, plug it in for ~5 min (installs, reboots)
+# card back in the Mac: zero-speedup-done.txt should say "OK ... <address>"
 ```
+
+The script backs up `user-data` and `cmdline.txt` (`*.bak-<time>`), replaces only the `runcmd` block, and bumps the NoCloud instance id so cloud-init runs once more. If the address the new signer derives doesn't match `zero-address.txt`, it stops before changing anything else. To turn cloud-init back on later, delete ` cloud-init=disabled` from `cmdline.txt` on the Mac.

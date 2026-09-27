@@ -9,6 +9,7 @@ import { Avatar } from "@/components/person";
 import { Button, Card, Field, Input, Notice, Textarea } from "@/components/ui";
 import type { ProfileDto } from "@/lib/server/profiles";
 import type { ApiKeyDto } from "@/lib/server/api-keys";
+import type { ArgoRequestDto } from "@/lib/server/argo";
 
 export default function MePage() {
   const { me, signedIn } = useSession();
@@ -37,6 +38,8 @@ export default function MePage() {
       <PhotoUpload />
 
       <AgentAccess />
+
+      <ArgoJournal />
 
       {profile && (
         <Card className="space-y-3">
@@ -236,6 +239,114 @@ function AgentAccess() {
               </div>
               <Button variant="danger" type="button" onClick={() => revoke(k.id)}>
                 Revoke
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {error && <Notice tone="error">{error}</Notice>}
+    </Card>
+  );
+}
+
+/**
+ * Link the Argo private AI journal. Concierges can then send it questions; the member answers in
+ * Argo and only approved answers come back, for matchmaking in that city or residency.
+ */
+function ArgoJournal() {
+  const link = useQuery({ queryKey: ["argo-link"], queryFn: () => api<{ link: { handle: string } | null }>("/api/argo/link") });
+  const requests = useQuery({
+    queryKey: ["argo-requests"],
+    queryFn: () => api<{ requests: ArgoRequestDto[] }>("/api/argo/requests"),
+    refetchInterval: 15_000,
+  });
+  const [handle, setHandle] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(fn: () => Promise<unknown>) {
+    setError(null);
+    setBusy(true);
+    try {
+      await fn();
+      await Promise.all([link.refetch(), requests.refetch()]);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const linked = link.data?.link ?? null;
+  const when = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+
+  return (
+    <Card className="space-y-4">
+      <div>
+        <h2 className="font-semibold">Argo private journal</h2>
+        <p className="mt-1 text-sm text-muted">
+          Link <a href="https://myargoquest.com" className="underline">Argo</a> and a city&apos;s or residency&apos;s concierge can
+          ask your journal questions (use <strong>Ask my Argo journal</strong> in the concierge chat). You answer each one in
+          Argo&apos;s Inbox, or decline it. Only the answers you approve come back, and the concierge uses them to introduce you to
+          people there. Your journal never leaves Argo.
+        </p>
+      </div>
+
+      {linked ? (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-line px-4 py-3">
+          <p className="text-sm">
+            Linked to <code>{linked.handle}</code>
+          </p>
+          <Button variant="danger" type="button" loading={busy} onClick={() => run(() => api("/api/argo/link", { method: "DELETE" }))}>
+            Unlink
+          </Button>
+        </div>
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            run(() => api("/api/argo/link", { method: "PUT", json: { handle } }).then(() => setHandle("")));
+          }}
+          className="flex flex-col gap-3 sm:flex-row sm:items-end"
+        >
+          <div className="flex-1">
+            <Field label="Argo @username or wallet" hint="Set your username in Argo under Settings → Username">
+              <Input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="@yourname" maxLength={64} required />
+            </Field>
+          </div>
+          <Button type="submit" loading={busy}>
+            Link Argo
+          </Button>
+        </form>
+      )}
+
+      {requests.data && requests.data.requests.length > 0 && (
+        <ul className="divide-y divide-line rounded-xl border border-line">
+          {requests.data.requests.map((r) => (
+            <li key={r.id} className="space-y-2 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium">
+                  {r.scope === "city" ? "City" : "Residency"} concierge · <code className="text-xs">{r.key.slice(0, 18)}</code>
+                </p>
+                <span className="text-xs text-muted">
+                  {r.status === "answered" ? `answered ${when(r.respondedAt!)}` : `waiting in Argo · sent ${when(r.createdAt)}`}
+                </span>
+              </div>
+              {r.answers ? (
+                <dl className="space-y-1 text-sm">
+                  {r.answers.map((a, i) => (
+                    <div key={i}>
+                      <dt className="text-muted">{a.question}</dt>
+                      <dd>{a.declined ? <em className="text-muted">Declined</em> : a.answer}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : (
+                <p className="text-xs text-muted">{r.questions.length} questions. Open Argo → Inbox to answer.</p>
+              )}
+              <Button variant="secondary" type="button" onClick={() => run(() => api(`/api/argo/requests/${r.id}`, { method: "DELETE" }))}>
+                {r.status === "answered" ? "Remove from concierge" : "Forget request"}
               </Button>
             </li>
           ))}

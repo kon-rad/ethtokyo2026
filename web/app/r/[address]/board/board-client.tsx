@@ -13,6 +13,7 @@ import { useNow, useHydrated } from "@/components/countdown";
 import { BoardCalendar } from "@/components/city-calendar";
 import type { ResidencyDto } from "@/lib/server/residencies";
 import type { Presence } from "@/lib/server/door";
+import type { DoorStatus } from "@/app/api/residencies/[address]/door/status/route";
 
 type ReceiptRow = { id: number; tx_hash: string; filename: string };
 
@@ -114,28 +115,59 @@ function useReceipts(address: Address) {
   });
 }
 
-type DoorStatus = {
-  status: "checking" | "opening" | "denied" | "open" | "locked";
-  message: string;
-  at: string;
-} | null;
-
 /** Door check-ins from the house's seat-key door (hardware/pi4/pi4-door.py). */
-function usePresence(address: Address) {
+function usePresence(address: Address, fast: boolean) {
   return useQuery({
     queryKey: ["board-presence", address],
     queryFn: () => api<Presence>(`/api/residencies/${address}/door/checkins`),
-    refetchInterval: 5_000,
+    refetchInterval: fast ? 1_000 : 5_000,
   });
 }
 
-/** Real-time door status (checking, opening, denied, locked) from pi4-door.py. */
+/** Live door state from pi4-door.py, shown as a banner over the board. */
 function useDoorStatus(address: Address) {
   return useQuery({
     queryKey: ["board-door-status", address],
     queryFn: () => api<DoorStatus>(`/api/residencies/${address}/door/status`),
-    refetchInterval: 2_000,
+    refetchInterval: 1_500,
   });
+}
+
+// How long each state stays on screen after the door's last post. A check can run for
+// minutes while the Zero boots (the door waits up to 300 s), so "checking" lasts longest.
+const BANNER_SECONDS = { checking: 330, opening: 45, open: 45, denied: 20, locked: 0 } as const;
+
+function DoorBanner({ door, sinceFetchS }: { door: NonNullable<DoorStatus>; sinceFetchS: number }) {
+  if (door.ageS + sinceFetchS > BANNER_SECONDS[door.status]) return null;
+  const elapsed = Math.max(0, Math.floor(door.elapsedS + sinceFetchS));
+  const clock = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
+  const look = {
+    checking: { bg: "bg-amber-950/95", title: "Checking seat key", icon: "spin" },
+    opening: { bg: "bg-emerald-800/95", title: "Welcome, door opening", icon: "ok" },
+    open: { bg: "bg-emerald-800/95", title: "Welcome, door open", icon: "ok" },
+    denied: { bg: "bg-red-950/95", title: "Door stays locked", icon: "no" },
+    locked: { bg: "", title: "", icon: "" },
+  }[door.status];
+  return (
+    <div
+      className={`absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 px-4 text-center ${look.bg}`}
+      role="status"
+      aria-live="polite"
+    >
+      {look.icon === "spin" && (
+        <span className="h-10 w-10 animate-spin rounded-full border-4 border-amber-300/30 border-t-amber-300 md:h-20 md:w-20" />
+      )}
+      {look.icon === "ok" && <span className="text-4xl text-emerald-300 md:text-7xl">&#10003;</span>}
+      {look.icon === "no" && <span className="text-4xl text-red-300 md:text-7xl">&#10007;</span>}
+      <p className="text-xl leading-tight font-bold md:text-5xl">{look.title}</p>
+      {door.message && <p className="max-w-full truncate text-xs text-white/80 md:text-xl">{door.message}</p>}
+      {door.status === "checking" && (
+        <p className="text-xs text-white/60 tabular-nums md:text-lg">
+          {clock} · keep the key plugged in, it takes about a minute to wake up
+        </p>
+      )}
+    </div>
+  );
 }
 
 function shortAddr(a: string): string {
@@ -150,8 +182,11 @@ export function BoardClient({ residency }: { residency: ResidencyDto }) {
   const chain = useChainState(address);
   const events = useRecentEvents(address, BigInt(residency.createdBlock));
   const receipts = useReceipts(address);
-  const presence = usePresence(address);
   const doorStatus = useDoorStatus(address);
+  const door = doorStatus.data ?? null;
+  const sinceFetchS = Math.max(0, now - doorStatus.dataUpdatedAt / 1000);
+  const doorOpen = !!door && (door.status === "opening" || door.status === "open") && door.ageS < 60;
+  const presence = usePresence(address, doorOpen);
   const inside = presence.data?.inside ?? [];
   // Door events from the last 12 hours lead the activity strip
   const doorEvents = (presence.data?.recent ?? []).filter(
@@ -195,7 +230,8 @@ export function BoardClient({ residency }: { residency: ResidencyDto }) {
   // the panel. Cap the board at the physical screen size; on a normal monitor this does nothing.
   const fit = hydrated ? { maxWidth: window.screen.width, maxHeight: window.screen.height } : undefined;
   return (
-    <div className={`flex h-full flex-col ${bg} text-white transition-colors duration-1000`} style={fit}>
+    <div className={`relative flex h-full flex-col ${bg} text-white transition-colors duration-1000`} style={fit}>
+      {door && hydrated && <DoorBanner door={door} sinceFetchS={sinceFetchS} />}
       {/* Top bar: residency name + status */}
       <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-1.5">
         <div className="min-w-0">
@@ -246,36 +282,6 @@ export function BoardClient({ residency }: { residency: ResidencyDto }) {
 
           {/* In the house: who checked in at the door and hasn't checked out */}
           <div className="min-w-0">
-            {/* Door status indicator: shown while the door is checking a key */}
-            {doorStatus.data && (
-              <div className="mb-1 flex items-center gap-1.5 text-[10px] md:text-sm">
-                {doorStatus.data.status === "checking" && (
-                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-400" />
-                )}
-                {doorStatus.data.status === "denied" && (
-                  <span className="inline-block h-2 w-2 rounded-full bg-red-400" />
-                )}
-                {doorStatus.data.status === "opening" && (
-                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-                )}
-                {doorStatus.data.status === "open" && (
-                  <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
-                )}
-                {doorStatus.data.status === "locked" && (
-                  <span className="inline-block h-2 w-2 rounded-full bg-white/30" />
-                )}
-                <span className={
-                  doorStatus.data.status === "denied" ? "text-red-300" : "text-white/80"
-                }>
-                  {doorStatus.data.status === "checking" && "Checking key..."}
-                  {doorStatus.data.status === "denied" && `Denied: ${doorStatus.data.message}`}
-                  {doorStatus.data.status === "opening" && "Door opening..."}
-                  {doorStatus.data.status === "open" && "Door open"}
-                  {doorStatus.data.status === "locked" && ""}
-                </span>
-                <span className="text-white/40">{new Date(doorStatus.data.at).toLocaleTimeString()}</span>
-              </div>
-            )}
             <p className="flex justify-between text-xs font-semibold md:text-lg">
               <span>In the house</span>
               <span className="tabular-nums">{inside.length}</span>

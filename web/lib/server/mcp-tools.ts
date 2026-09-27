@@ -26,6 +26,8 @@ import * as residencyKnowledge from "@/app/api/concierge/residency/[address]/kno
 import * as cityConcierge from "@/app/api/concierge/city/[slug]/route";
 import * as residencyConcierge from "@/app/api/concierge/residency/[address]/route";
 import * as knowledgeSearch from "@/app/api/knowledge/search/route";
+import * as argoLink from "@/app/api/argo/link/route";
+import * as argoRequests from "@/app/api/argo/requests/route";
 
 /**
  * The MCP tools. Each one is a thin mapping onto an HTTP route, and runs that route's handler
@@ -550,5 +552,36 @@ export const tools: Tool[] = [
     inputSchema: obj({ scope, key: scopeKey, filename: str("File name") }, ["scope", "key", "filename"]),
     annotations: D,
     call: (a) => ({ ...knowledge(a), handler: knowledge(a).handler.DELETE, method: "DELETE", json: { filename: a.filename } }),
+  },
+
+  // Argo private journal
+  {
+    name: "link_argo_journal",
+    title: "Link my Argo journal",
+    description:
+      "Link your human's Argo private AI journal by their Argo @username or the 0x wallet in Argo. Nothing is shared at link time; it only lets concierges send questions they answer in Argo.",
+    inputSchema: obj({ handle: str("Argo @username or 0x address") }, ["handle"]),
+    annotations: W,
+    call: (a) => ({ handler: argoLink.PUT as Handler, method: "PUT", path: "/api/argo/link", json: { handle: a.handle } }),
+  },
+  {
+    name: "ask_my_argo_journal",
+    title: "Ask my Argo journal (via a concierge)",
+    description:
+      "Have a city's or residency's concierge send questions to your human's linked Argo journal (default: four matchmaking questions about what they're building, who they want to meet, what they offer, and topics). They answer or decline each in Argo's Inbox; approved answers reach that concierge, which uses them to introduce people. Argo allows 3 of these a day per person.",
+    inputSchema: obj(
+      { scope, key: scopeKey, questions: { type: "array", items: str("A question, up to 500 characters"), maxItems: 10, description: "Optional custom questions" } },
+      ["scope", "key"],
+    ),
+    annotations: W,
+    call: (a) => ({ handler: argoRequests.POST as Handler, method: "POST", path: "/api/argo/requests", json: pick(a, ["scope", "key", "questions"]) }),
+  },
+  {
+    name: "list_my_argo_requests",
+    title: "List my Argo journal requests",
+    description: "Requests sent to your human's Argo journal, whether they're still waiting, and the answers they approved.",
+    inputSchema: obj({}),
+    annotations: R,
+    call: () => ({ handler: argoRequests.GET as Handler, method: "GET", path: "/api/argo/requests" }),
   },
 ];

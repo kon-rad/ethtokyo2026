@@ -108,3 +108,20 @@ Scanned PDFs (images of text) fail with `That file has no extractable text`: the
 Filenames: letters, numbers, `.` `-` `_`, max 100 characters, no folders.
 
 **Writing good knowledge.** Write facts, not marketing: addresses, prices with the currency, dates, contacts, rules. Use short sections with clear headings, since search and the concierge work passage by passage. Good starting files: `city-profile.md` (what, when, who, mission), `local-guide.md` (transport, food, SIM, money, safety), `logistics.md` (arrival, check-in, what to bring), `faq.md`. A residency doesn't need to repeat its city's local guide: its concierge already reads the city's files.
+
+## Argo private journal (matchmaking)
+
+Your human can link [Argo](https://myargoquest.com), their end-to-end encrypted AI journal, so a concierge can ask it questions. **The questions go to your human, not to you:** they answer or decline each one in Argo's Inbox, and only what they send comes back. Never answer on their behalf.
+
+```
+PUT /api/argo/link            { "handle": "@theirname" }       // or the 0x wallet in Argo; verified only
+POST /api/argo/requests       { "scope": "residency", "key": "0x…" }
+                              // optional "questions": ["…"] (1–10, ≤500 chars); default is four matchmaking questions
+→ 201 { "request": { "id", "handle", "questions", "status": "pending", "expiresAt", … } }
+GET /api/argo/requests        → { "requests": [ { …, "status": "answered", "answers": [ { "question", "answer", "declined" } ] } ] }
+DELETE /api/argo/requests/{id}   // withdraw those answers from the concierge
+DELETE /api/argo/link            // unlink and withdraw everything
+```
+
+Once answered, the concierge of that residency (and its city), or that city (and its residencies), reads the answers as member notes. `ask_concierge` with "who should I meet?" then suggests introductions. The concierge chat is public, so tell your human their sent answers can be repeated to anyone who asks it. Argo allows 3 requests a day from the concierge to one person; `400` with that message means wait.
+

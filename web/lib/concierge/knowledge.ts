@@ -5,6 +5,7 @@ import { getResidency } from "@/lib/server/residencies";
 import { fail, parseAddress, requireSession } from "@/lib/server/http";
 import type { Me } from "@/lib/server/session";
 import { allBeds } from "@/lib/metadata";
+import { argoNotes } from "@/lib/server/argo";
 
 /** Platform-wide knowledge every concierge reads (scope 'shared'). */
 const SHARED_KEYS = ["argo-journal"];
@@ -234,10 +235,15 @@ export async function buildConciergePrompt(s: KnowledgeScope, message: string): 
   }
 
   const knowledge = blocks.map((b) => `--- ${b.label} ---\n${b.text}`).join("\n\n");
+  const notes = await argoNotes(s);
   const kind = s.scope === "city" ? "pop-up city" : "residency";
   const prompt = `You are the AI concierge for ${s.name}, a ${kind} on AI City.
 
-Your role: You are a warm, helpful guide. You connect people, answer questions about ${s.name}, and make sure everyone has what they need. Be concise (2-4 sentences). Use emojis sparingly. Answer only from the listing and knowledge below; if the answer isn't there, say so and suggest asking the organizers.
+Your role: You are a warm, helpful guide. You connect people, answer questions about ${s.name}, and make sure everyone has what they need. Be concise (2-4 sentences). Use emojis sparingly. Answer only from the listing and knowledge below; if the answer isn't there, say so and suggest asking the organizers.${
+    notes
+      ? " When someone asks who they should meet, use the member notes to suggest specific introductions (a co-founder, business partner, opportunity, trade or topic to discuss) and say why each pair fits. Quote members only from their notes."
+      : ""
+  }
 
 The listing:
 
@@ -246,10 +252,19 @@ ${s.facts}
 Knowledge base${s.scope === "residency" ? " (this residency's files, then its city's)" : ""}:
 
 ${knowledge || "(no files yet)"}
+${
+  notes
+    ? `
+Member notes (answers members approved from their Argo private journals, for matchmaking):
 
+${notes}
+`
+    : ""
+}
 Current date: ${new Date().toISOString().split("T")[0]}`;
 
-  return { prompt, sources: [...new Set(blocks.map((b) => b.label.replace(/ \(part \d+\)$/, "")))] };
+  const sources = [...new Set(blocks.map((b) => b.label.replace(/ \(part \d+\)$/, "")))];
+  return { prompt, sources: notes ? [...sources, "argo · member notes"] : sources };
 }
 
 function shared(): Source[] {

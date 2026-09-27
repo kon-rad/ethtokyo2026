@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
+import { useSession } from "@/components/session";
 
 type Message = {
   role: "user" | "assistant";
@@ -30,6 +32,40 @@ export function ConciergePanel({ scope, slugOrAddress, name }: Props) {
     "How do I get from the airport?",
   ]);
   const listRef = useRef<HTMLDivElement>(null);
+  const { signedIn } = useSession();
+  const [argoNeedsLink, setArgoNeedsLink] = useState(false);
+
+  /** Have this concierge send its matching questions to the member's linked Argo journal. */
+  async function askArgo() {
+    if (loading) return;
+    setMessages((prev) => [...prev, { role: "user", content: "Ask my Argo journal" }]);
+    setLoading(true);
+    setArgoNeedsLink(false);
+    try {
+      const res = await fetch("/api/argo/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope, key: slugOrAddress }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (/link your argo/i.test(data.error ?? "")) setArgoNeedsLink(true);
+        throw new Error(data.error ?? "Couldn't reach Argo");
+      }
+      const n = data.request.questions.length;
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `I sent ${n} questions to your Argo journal (${data.request.handle}). Open Argo → Inbox, answer or decline each one, and send. Once your answers arrive I'll use them to introduce you to people here. Ask me "who should I meet?" after that.`,
+        },
+      ]);
+    } catch (err) {
+      setMessages((prev) => [...prev, { role: "assistant", content: err instanceof Error ? err.message : "Couldn't reach Argo" }]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -111,8 +147,18 @@ export function ConciergePanel({ scope, slugOrAddress, name }: Props) {
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{name} Concierge</p>
-            <p className="text-xs text-muted">AI City · Phase 1 mock</p>
+            <p className="text-xs text-muted">AI City concierge</p>
           </div>
+          {signedIn && (
+            <button
+              onClick={askArgo}
+              disabled={loading}
+              className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700 transition hover:border-indigo-300 disabled:opacity-50"
+              title="Send this concierge's matching questions to your linked Argo private journal"
+            >
+              Ask my Argo journal
+            </button>
+          )}
         </div>
 
         {/* Messages */}
@@ -151,6 +197,14 @@ export function ConciergePanel({ scope, slugOrAddress, name }: Props) {
             </div>
           )}
         </div>
+
+        {argoNeedsLink && (
+          <div className="border-t border-line px-5 py-2 text-xs">
+            <Link href="/me" className="font-medium text-indigo-600 underline">
+              Link your Argo journal on your profile →
+            </Link>
+          </div>
+        )}
 
         {/* Suggestions */}
         {suggestions.length > 0 && !loading && (

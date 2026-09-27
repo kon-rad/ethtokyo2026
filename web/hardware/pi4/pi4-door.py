@@ -29,7 +29,7 @@ Config is read from the environment; aicity-door.service loads
 Usage:  pi4-door.py [run | open | close | test]
 """
 
-import glob, json, os, re, secrets, sys, time, urllib.error, urllib.request
+import glob, json, os, queue, re, secrets, sys, threading, time, urllib.error, urllib.request
 
 from eth_abi import decode as abi_decode, encode as abi_encode
 from eth_account import Account
@@ -51,20 +51,33 @@ PWM = "/sys/class/pwm/pwmchip0"
 # ──────────────────────────────────────────────────────────
 
 
+_status_queue = queue.Queue()
+
+
+def _status_worker():
+    while True:
+        status, message = _status_queue.get()
+        try:
+            data = json.dumps({"status": status, "message": message[:200]}).encode()
+            req = urllib.request.Request(
+                app_url() + f"/api/residencies/{residency_address()}/door/status",
+                data, {"Content-Type": "application/json",
+                       "x-door-key": DOOR_API_KEY,
+                       "User-Agent": "aicity-door/1"})
+            urllib.request.urlopen(req, timeout=5)
+        except Exception as e:
+            log(f"door status not sent: {e}")  # advisory; the door never waits on it
+
+
 def door_status(status, message=""):
-    """POST the current door state to the app for the board's status indicator."""
-    if not APP_URL or not DOOR_API_KEY:
+    """Queue the door state for the board's banner (checking, opening, open, denied, locked).
+    Sent in order by one background thread, so a slow network never delays the latch."""
+    if not DOOR_API_KEY or not app_url():
         return
-    try:
-        data = json.dumps({"status": status, "message": message}).encode()
-        req = urllib.request.Request(
-            APP_URL + f"/api/residencies/{residency_address()}/door/status",
-            data, {"Content-Type": "application/json",
-                   "x-door-key": DOOR_API_KEY,
-                   "User-Agent": "aicity-door/1"})
-        urllib.request.urlopen(req, timeout=5)
-    except Exception:
-        pass  # status reporting is advisory; don't block the door
+    if not getattr(door_status, "started", False):
+        threading.Thread(target=_status_worker, daemon=True).start()
+        door_status.started = True
+    _status_queue.put((status, message))
 
 
 def log(msg):
@@ -192,10 +205,16 @@ def find_key():
     return None
 
 
-def ask(ser, command, prefix, wait):
-    """Send command every 2 s until a line starting with prefix arrives."""
-    deadline = time.time() + wait
+def ask(ser, command, prefix, wait, progress=None):
+    """Send command every 2 s until a line starting with prefix arrives.
+    progress(elapsed) is called every 15 s while waiting."""
+    start = time.time()
+    deadline = start + wait
+    next_progress = start + 15
     while time.time() < deadline:
+        if progress and time.time() >= next_progress:
+            progress(time.time() - start)
+            next_progress += 15
         ser.write((command + "\n").encode())
         resend = time.time() + 2
         while time.time() < min(resend, deadline):
@@ -209,17 +228,21 @@ def ask(ser, command, prefix, wait):
 
 def handle_key(port, residency):
     import serial
-    door_status("checking", "Key detected, waiting for signer...")
+    door_status("checking", "Seat key plugged in. It's starting up.")
+    t0 = time.time()
     with serial.Serial(port, 115200, timeout=0.5) as ser:
-        # The Zero boots off the Pi's USB power; its signer can take a minute to start
-        ask(ser, "PING", "PONG", wait=120)
+        # The Zero boots off the Pi's USB power. The serial port appears partway through
+        # its boot, and the signer answers once Python has loaded.
+        pong = ask(ser, "PING", "PONG", wait=300,
+                   progress=lambda s: log(f"waiting for the key's signer, {s:.0f}s"))
+        log(f"key awake after {time.time() - t0:.1f}s on the port ({pong.strip() or 'no uptime'})")
+        door_status("checking", "Key is awake. Checking its signature.")
         try:
             challenge = app_request(f"/api/residencies/{residency}/door/challenge")["challenge"]
             from_app = True
         except Exception as e:
             log(f"app unreachable, local challenge, check-in won't be recorded: {e}")
             challenge, from_app = secrets.token_hex(32), False
-        door_status("checking", "Verifying key...")
         sig = ask(ser, f"DOOR:{residency}:{challenge}", "DOOR_SIG:", wait=10)
     signer = Account.recover_message(encode_defunct(text=door_message(residency, challenge)),
                                      signature=sig)
@@ -260,6 +283,7 @@ def run():
             handle_key(port, residency)
         except Exception as e:
             log(f"key error: {type(e).__name__}: {e}")
+            door_status("denied", f"Key error: {e}. Unplug it and try again.")
         while os.path.exists(port):  # one open per insertion
             time.sleep(1)
         log("key removed")

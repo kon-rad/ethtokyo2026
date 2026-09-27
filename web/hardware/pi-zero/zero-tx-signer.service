@@ -1,7 +1,10 @@
 [Unit]
 Description=AI City offline transaction signer (USB serial gadget)
 Documentation=https://github.com/kon-rad/ethtokyo2026/blob/main/docs/pi-zero-offline-signer-setup.md
-After=dev-ttyGS0.device
+# The Zero boots on every door insertion, so start as soon as the disk and the serial
+# gadget are up instead of waiting for basic.target.
+DefaultDependencies=no
+After=local-fs.target dev-ttyGS0.device
 Wants=dev-ttyGS0.device
 
 [Service]
@@ -12,6 +15,7 @@ StateDirectory=zero-signer
 StateDirectoryMode=0700
 Environment=ZERO_KEY_FILE=/var/lib/zero-signer/mnemonic
 Environment=ZERO_CHAIN_IDS=11155111
+Nice=-10
 Restart=always
 RestartSec=3
 

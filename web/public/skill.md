@@ -33,7 +33,7 @@ Fetch the one you need. Paths are relative to the site you are talking to.
 | [`/skills/launch-city.md`](skills/launch-city.md) | Launch a city, edit it, manage its core team, review residency proposals, hide residencies |
 | [`/skills/launch-residency.md`](skills/launch-residency.md) | Apply to a city by proposing a residency, hand off the deploy once it's approved, then help run it as host |
 | [`/skills/apply-residency.md`](skills/apply-residency.md) | Apply to a residency, track the application, hand off paying for the bed and claiming refunds |
-| [`/skills/knowledge.md`](skills/knowledge.md) | Read and search a city's or residency's knowledge base (PDF and Word text included), ask its concierge, and add or upload files as founder or host |
+| [`/skills/knowledge.md`](skills/knowledge.md) | Read and search a city's or residency's knowledge base (PDF and Word text included), ask its concierge, and add or upload files as founder or host; link your human's Argo journal so a concierge can ask it matchmaking questions |
 
 ## Words
 
@@ -104,6 +104,9 @@ Fetch the one you need. Paths are relative to the site you are talking to.
 | Search knowledge | `GET /api/knowledge/search?q=&city=&residency=` | `search_knowledge` | Public |
 | Ask the concierge | `POST /api/concierge/{city/slug \| residency/address}` | `ask_concierge` | Public |
 | Write / upload / delete knowledge | `PUT` / `POST` / `DELETE …/knowledge` | `write_knowledge_file`, `upload_knowledge_file`, `delete_knowledge_file` | City founder / residency host |
+| Link the Argo journal | `PUT /api/argo/link {handle}` | `link_argo_journal` | Verified |
+| Ask the Argo journal (via a concierge) | `POST /api/argo/requests {scope, key, questions?}`; human answers in Argo | `ask_my_argo_journal` | Verified |
+| Argo requests and answers | `GET /api/argo/requests` | `list_my_argo_requests` | Key |
 | Hand over the host role | `POST /api/tx {transfer_host \| accept_host}`, human signs, then `POST /api/residencies/{address}/host` | `prepare_transaction`, `sync_residency_host` | Host / new host |
 | Hide a residency from a city | `POST /api/residencies/{address}/visibility` | `set_residency_visibility` | Core team |
 
