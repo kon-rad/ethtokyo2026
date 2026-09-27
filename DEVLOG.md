@@ -38,6 +38,7 @@ This is the internal log. The public build journal at `/devlog` (`web/app/devlog
 **Commit:** uncommitted
 
 - `README.md`: new **Features** section covering launching a city; residency proposals approved or rejected by the city's founder/core team; guests approved or denied by the host, then staking; the contract's withdraw rule (Failed → refunds, Active once `minSeats` paid → withdraw against receipts, Closed → pro-rata); the air-gapped Pi Zero seat key and door rules as the agent-first proof of concept; the Pi 4 house board; concierge + knowledge bases (residency reads its city's files) and the MCP knowledge tools; the Argo journal link. Pages table gains `/blog/argo-journal-concierge`. Ends with "A Konrad Gnat production. Founder, Argo."
+- `README.md`: **Demo video** section under the live link (YouTube thumbnail linking to https://www.youtube.com/watch?v=LqMwDiv1P_w), and the screen-recordings table now points to it as the full walkthrough.
 - `/docs` (`web/app/docs/page.tsx`): new "Concierge and Argo" section: `#concierge`, `#knowledge-bases` (scope table + MCP tools), `#argo-journal` (link → request → approve → match, and a sees / never-sees table).
 - `/blog/argo-journal-concierge` (new) and the blog index entry. Landing page (`web/app/page.tsx`): an Argo section above People linking to the post and the docs.
 - Footer (`web/components/footer.tsx`): "A Konrad Gnat production · Founder, Argo" linking to myargoquest.com.

@@ -6,6 +6,12 @@ Luma for pop-up cities. Anyone can launch a city (a place and a time window, off
 
 Live on Ethereum mainnet at [aicity.cyou](https://aicity.cyou).
 
+## Demo video
+
+[![AI City demo video](https://img.youtube.com/vi/LqMwDiv1P_w/maxresdefault.jpg)](https://www.youtube.com/watch?v=LqMwDiv1P_w)
+
+Watch on YouTube: https://www.youtube.com/watch?v=LqMwDiv1P_w
+
 ## Features
 
 ### 1. Launch a pop-up city
@@ -47,6 +53,42 @@ A proof of concept for an **agent-first pop-up city**, where a house checks who 
 - **Plug it in and the door opens.** The Zero plugs into the house's Raspberry Pi 4 by its USB data port, powers up from it, and appears as a USB serial device. The Pi 4 fetches a one-time challenge from the app, sends it to the Zero, and the Zero signs it. The Pi 4 recovers the address from the signature and checks the door rule. If it passes, the servo latch opens for 30 seconds and locks again.
 - **Door rules** (`DOOR_RULE`): `pair` (the first key plugged in is enrolled; for the bench test), `staked` (the address is the host or has staked in this residency, read from the contract), `active` (staked, the residency is Active, and today falls within its dates).
 - **Every check-in is recorded.** The Pi 4 posts the signed challenge to the app, which verifies it (HMAC-bound, single use, 5-minute window) and toggles that wallet in or out of the house.
+
+#### What happens when you plug the Zero into the Pi 4
+
+The Zero is a wallet with no network: one private key, no Wi-Fi, no screen, and a USB cable as its only way in or out. The Pi 4 is on Wi-Fi and runs two things: the kiosk showing the board, and the door service (`aicity-door`, [`pi4-door.py`](web/hardware/pi4/pi4-door.py)).
+
+| # | Where | What happens |
+|---|---|---|
+| 1 | Both | The Pi 4's USB port powers the Zero, which boots from cold (it has no battery). |
+| 2 | Zero → Pi 4 | Partway through boot the Zero loads `g_serial`, and its USB port becomes a plain serial line. The Pi 4 sees `/dev/serial/by-id/…Gadget_Serial…`. It's a text line, not a network link, so the Zero can't reach the internet through it. |
+| 3 | Pi 4 ↔ Zero | The door sends `PING` every 2 s. On the Zero, `zero-tx-signer` ([`zero-tx-signer.py`](web/hardware/pi-zero/zero-tx-signer.py)) loads its key from `/var/lib/zero-signer/` (owner-only) and answers `PONG`. About a minute from plug-in on a Zero 1. |
+| 4 | Pi 4 → app | The door fetches a one-time challenge: `GET /api/residencies/[addr]/door/challenge`. 32 bytes: issue time, 8 random bytes and an HMAC of both keyed from the server's secret, so the server knows its own challenges without storing them. |
+| 5 | Pi 4 ↔ Zero | The door sends `DOOR:<residency>:<challenge>`. The Zero checks it against a strict pattern, signs the fixed text `AI City door access` / `residency: …` / `challenge: …` as an EIP-191 personal message, and replies `DOOR_SIG:0x…`. The key never leaves the Zero, and this command can't be used to sign a transaction or a login. |
+| 6 | Pi 4 | The door recovers the signer's address from the signature and checks `DOOR_RULE`. `pair` compares it with the enrolled address in `/var/lib/aicity-door/paired-address`. `staked` and `active` read the residency contract instead. |
+| 7 | Pi 4 | If the rule passes, the servo latch opens: hardware PWM on GPIO 12 (pin 32), servo powered from the breadboard, grounds shared. |
+| 8 | Pi 4 → app | While the latch is open, the door posts the challenge and signature to `POST /api/residencies/[addr]/door/checkins`. The server checks it without trusting the door: it issued the challenge, the challenge is under 5 minutes old and unused, and the signature recovers to that address. Then it writes a `door_checkins` row that flips the wallet in or out. |
+| 9 | Pi 4 | After `DOOR_OPEN_SECONDS` the latch locks. |
+| 10 | Kiosk | The board polls `GET …/door/checkins` every 5 s and shows the wallet under **In the house** with its profile name and bed. |
+| 11 | Pi 4 | One open per plug-in: the door waits for the serial port to disappear (`key removed`) before it answers the next insertion. |
+
+What the door service logs for one insertion, from the first hardware run on 2026-09-27:
+
+```
+09:29:43 key on /dev/serial/by-id/usb-Linux_…_Gadget_Serial_v2.4-if00
+09:30:13 key awake after 30.0s on the port (up=58.7 ready=58.7)
+09:30:14 OPEN 0x2C0a…f798: paired key is 0x2C0a…f798
+09:30:15 checked in: 0x2C0a…f798
+09:30:23 locked
+```
+
+| | Holds | Can't |
+|---|---|---|
+| **Pi Zero** | The private key (mnemonic plus a cached derived key) | Reach any network, or sign anything but door messages and in-policy transactions (Sepolia, capped value and fee) |
+| **Pi 4** | The door rule, the paired address, the latch | Sign as the guest. It only ever sees signatures |
+| **App** | Check-in rows, profile names, the challenge secret | Record a check-in without a fresh signature from that wallet |
+
+Known gaps: the board is public, so anyone with its URL can see who's inside. The door itself isn't authenticated to the app yet, so a guest holding their own key could sign a challenge away from the door.
 
 Setup: [`docs/pi4-door-kiosk-setup.md`](docs/pi4-door-kiosk-setup.md), [`docs/pi-zero-offline-signer-setup.md`](docs/pi-zero-offline-signer-setup.md). Code: `web/hardware/pi-zero/`, `web/hardware/pi4/`.
 
@@ -174,6 +216,8 @@ Steps as run (or to repeat):
 5. Smoke test with a 1 USDC city before announcing.
 
 ## Demos (screen recordings)
+
+The full walkthrough is the [demo video on YouTube](https://www.youtube.com/watch?v=LqMwDiv1P_w). The raw clips:
 
 | File | What it shows |
 |------|---------------|
